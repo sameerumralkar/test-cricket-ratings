@@ -57,3 +57,9 @@ python3 scripts/plot_history.py              # one panel per team
 Pushing changes under `dist/` redeploys the site via GitHub Actions.
 
 Data: [ESPNcricinfo Statsguru](https://stats.espncricinfo.com/ci/engine/stats/index.html?class=1;template=results;type=team). Requires Python 3.9+, no third-party packages.
+
+## License
+
+The code, rating method and charts are released under the [MIT License](LICENSE).
+
+The match results in `data/matches.json` (and embedded in `dist/index.html`) come from ESPNcricinfo Statsguru and are not covered by this license; they remain subject to [ESPNcricinfo's terms of use](https://www.espncricinfo.com/ci/content/site/company/terms_use.html).
