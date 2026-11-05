@@ -1,0 +1,15 @@
+{
+  "Australia":    {"name": "Canary yellow",       "hex": "#F2C200"},
+  "England":      {"name": "Sky blue",            "hex": "#4FAEE3"},
+  "South Africa": {"name": "Green",               "hex": "#00843D"},
+  "West Indies":  {"name": "Maroon",              "hex": "#7B1E3A"},
+  "New Zealand":  {"name": "Black",               "hex": "#111111"},
+  "India":        {"name": "Metallic blue",       "hex": "#32527B"},
+  "Pakistan":     {"name": "Dark green",          "hex": "#0B4D22"},
+  "Sri Lanka":    {"name": "Blue gray",           "hex": "#7D8FA8"},
+  "Zimbabwe":     {"name": "Red",                 "hex": "#D21034"},
+  "Bangladesh":   {"name": "Olive green",         "hex": "#7A8B2A"},
+  "Ireland":      {"name": "St Patrick's green",  "hex": "#169B62"},
+  "Afghanistan":  {"name": "Purple",              "hex": "#6A3D9A"},
+  "ICC World XI": {"name": "Gray",                "hex": "#8E8E8E"}
+}
