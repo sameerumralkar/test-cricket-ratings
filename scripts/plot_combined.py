@@ -15,7 +15,7 @@ from ratings_engine import COLORS, ROOT, compute, year
 MODE = sys.argv[1] if len(sys.argv) > 1 else "form"
 CUM = MODE == "cumulative"
 # Cumulative ratings sit closer together, so the same-strength band is halved to +/-4.
-matches, hist = compute("cumulative", band=4) if CUM else compute()
+matches, hist = compute("cumulative") if CUM else compute()
 
 # Colours come from data/team_colors.json. Line style separates the six
 # longest-standing teams (solid) from the rest (dashed), which also keeps

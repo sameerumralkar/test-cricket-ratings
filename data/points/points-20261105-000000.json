@@ -1,0 +1,17 @@
+{
+  "pts": { "fo": [24, -24], "inns": [16, -16], "big": [14, -14], "close": [9, -6], "other": [12, -12] },
+  "draw": { "home": 0, "neutral": 1, "away": 2 },
+  "tie": 4,
+  "vpos": { "home": 1, "neutral": 1.2, "away": 1.4 },
+  "vneg": { "home": 1.2, "neutral": 1, "away": 0.8 },
+  "opos": { "stronger": 1.4, "same": 1, "weaker": 0.7 },
+  "oneg": { "stronger": 0.7, "same": 1, "weaker": 1.4 },
+  "band": 8,
+  "alpha": 0.06,
+  "scale": 4,
+  "start": 100,
+  "debut": 85,
+  "active": 4,
+  "bandCum": 4,
+  "cushion": 10
+}

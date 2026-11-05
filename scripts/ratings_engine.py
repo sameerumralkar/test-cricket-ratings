@@ -9,13 +9,9 @@ matches = json.loads((ROOT / "data" / "matches.json").read_text())
 # Team colours, fixed by the user: always use these for every chart and the app.
 COLORS = {t: v["hex"] for t, v in json.loads((ROOT / "data" / "team_colors.json").read_text()).items()}
 
-CFG = {
-    "pts": {"fo": (24, -24), "inns": (16, -16), "big": (14, -14), "close": (9, -6), "other": (12, -12)},
-    "draw": {"home": 0, "neutral": 1, "away": 2}, "tie": 4,
-    "vpos": {"home": 1, "neutral": 1.2, "away": 1.4}, "vneg": {"home": 1.2, "neutral": 1, "away": 0.8},
-    "opos": {"stronger": 1.4, "same": 1, "weaker": 0.7}, "oneg": {"stronger": 0.7, "same": 1, "weaker": 1.4},
-    "band": 8, "alpha": 0.06, "scale": 4, "start": 100, "debut": 85,
-}
+# The official points system (newest file in data/points/), same as the app uses.
+from points import latest as _latest  # noqa: E402
+POINTS_FILE, CFG = _latest()
 
 
 def category(m):
@@ -41,7 +37,6 @@ def year(d):
 
 
 
-PRIOR_TESTS = 10  # cumulative mode: each team starts with 10 Tests' worth of its starting rating
 
 
 def compute(mode="form", band=None):
@@ -51,7 +46,7 @@ def compute(mode="form", band=None):
     mode="cumulative": every Test since a team's debut counts equally; the rating is the
                        average match score over all its Tests to date, so it never forgets.
     """
-    band = CFG["band"] if band is None else band
+    band = (CFG["bandCum"] if mode == "cumulative" else CFG["band"]) if band is None else band
     rating, hist, total, played = {}, {}, {}, {}
     for m in matches:
         teams = m["teams"]
@@ -81,7 +76,7 @@ def compute(mode="form", band=None):
                 prior = CFG["start"] if t in ("England", "Australia") else CFG["debut"]
                 total[t] += score
                 played[t] += 1
-                rating[t] = (PRIOR_TESTS * prior + total[t]) / (PRIOR_TESTS + played[t])
+                rating[t] = (CFG["cushion"] * prior + total[t]) / (CFG["cushion"] + played[t])
             else:
                 rating[t] = before[t] + CFG["alpha"] * (score - before[t])
             hist[t].append((year(m["date"]), rating[t], m["date"]))

@@ -3,7 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["dist/**", ".github/workflows/pages.yml"]
+    # data/points/** = the admin saved a new points system; rebuild with it.
+    paths: ["data/**", "app/**", "scripts/build.py", "scripts/points.py", "dist/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -23,6 +24,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Rebuild the page from the data and the newest points file. An invalid
+      # points file fails here, so the live site keeps its previous version.
+      - name: Build
+        run: python3 scripts/build.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

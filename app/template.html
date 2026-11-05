@@ -112,6 +112,14 @@ button:disabled { opacity: .4; cursor: default; }
 .side { display: grid; gap: 2px; min-width: 190px; }
 .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 .note { font-size: 13px; color: var(--muted); }
+.adminbar { border: 2px solid var(--ball); }
+.adminbar p { margin: 0 0 8px; max-width: 80ch; }
+.draft { background: var(--ball); color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 14px; font-weight: 500; }
+.draft a { color: #fff; }
+a.btn { display: inline-block; font: 600 15px var(--font-display); text-transform: uppercase; letter-spacing: .05em; padding: 7px 14px; border: 1px solid var(--pitch); border-radius: 6px; text-decoration: none; }
+a.btn.primary { background: var(--pitch); color: var(--surface); }
+a.btn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
+.pointsgrid input:disabled { border-color: transparent; background: transparent; color: var(--ink); -webkit-text-fill-color: var(--ink); opacity: 1; padding-right: 0; }
 .modebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 18px; }
 .modebar button[aria-checked="true"] { background: var(--pitch); color: var(--surface); }
 .modebar .note { flex-basis: 100%; }
@@ -139,6 +147,7 @@ button:disabled { opacity: .4; cursor: default; }
 </header>
 
 <main class="wrap">
+  <div class="draft" id="draftBanner" hidden>Previewing unsaved points changes: these ratings are not the official ones. <a href="#admin">Back to admin</a></div>
   <div class="modebar" role="radiogroup" aria-label="Rating type">
     <span class="muted">Rating type</span>
     <button type="button" role="radio" data-mode="form" id="mode-form">Current form</button>
@@ -224,6 +233,16 @@ button:disabled { opacity: .4; cursor: default; }
 
   <!-- POINTS -->
   <section class="view" id="v-points">
+    <div class="panel adminbar" id="adminBar" hidden>
+      <h3>Admin: edit the points system</h3>
+      <p>Change any value below. Every rating since 1877 is worked out again, but only in this browser tab. Nobody else sees your changes until you save them.</p>
+      <p class="note">Saving opens GitHub with the new settings filled in as a new file. Click <b>Commit changes</b> there; the site rebuilds with the new points in about a minute. Only the repository owner can commit, so other visitors who find this page cannot change anything.</p>
+      <div class="row">
+        <a class="btn primary" id="saveGitHub" target="_blank" rel="noopener">Save to GitHub</a>
+        <button id="discardDraft" type="button">Discard changes</button>
+        <span class="note" id="draftStatus"></span>
+      </div>
+    </div>
     <div class="grid2">
       <div class="panel prose">
         <h3>How a Test is scored</h3>
@@ -233,8 +252,7 @@ button:disabled { opacity: .4; cursor: default; }
         <p><b>3. Opposition.</b> Before the Test, each side is compared on rating. If the gap is within the band it counts as the same strength; otherwise stronger or weaker. Beating a stronger side earns more, losing to a weaker side costs more.</p>
         <p><b>Rating.</b> Points become a match score of <span class="mono">base + scale × points</span>. The rating moves part of the way toward that score after each Test: <span class="mono">new = old + α × (score − old)</span>. Recent form counts most and old results fade, so no team can bank points forever. Abandoned Tests change nothing.</p>
         <p><b>All Tests to date.</b> The second rating type never forgets: a team's rating is its average match score over every Test it has played, so a 1950 win counts as much as last week's. Each team starts with a cushion of 10 Tests at its starting rating so its first few results don't swing it wildly. Averages sit closer together, so the same-strength band is ±4, and every team stays ranked however long since its last Test.</p>
-        <p class="note">Edit any value and every rating since 1877 is worked out again. Your changes are kept in this browser only.</p>
-        <div class="row"><button id="resetCfg" type="button">Reset to defaults</button></div>
+        <p class="note" id="ptsNote"></p>
       </div>
       <div class="panel tbl-wrap">
         <h3>Result points</h3>
@@ -285,14 +303,9 @@ button:disabled { opacity: .4; cursor: default; }
 <script>
 const DATA = "__DATA__";
 
-const DEFAULTS = {
-  pts: { fo: [24, -24], inns: [16, -16], big: [14, -14], close: [9, -6], other: [12, -12] },
-  draw: { home: 0, neutral: 1, away: 2 }, tie: 4,
-  vpos: { home: 1, neutral: 1.2, away: 1.4 }, vneg: { home: 1.2, neutral: 1, away: 0.8 },
-  opos: { stronger: 1.4, same: 1, weaker: 0.7 }, oneg: { stronger: 0.7, same: 1, weaker: 1.4 },
-  band: 8, alpha: 0.06, scale: 4, start: 100, debut: 85, active: 4,
-  bandCum: 4, cushion: 10
-};
+// The official points system: newest file in data/points/ in the repo, embedded at build time.
+// Viewers see it read-only; the admin view (#admin) edits a draft and saves it to GitHub.
+const OFFICIAL = DATA.points;
 const CATS = [
   ["fo", "After follow-on", "Won after following on / lost after enforcing it"],
   ["inns", "By an innings", "Innings victory"],
@@ -311,11 +324,11 @@ try { if (localStorage.getItem("ttr-mode") === "cumulative") MODE = "cumulative"
 let R; // engine result
 
 function load() {
-  try { const s = localStorage.getItem("ttr-cfg"); if (s) return merge(structuredClone(DEFAULTS), JSON.parse(s)); } catch (e) {}
-  return structuredClone(DEFAULTS);
+  try { localStorage.removeItem("ttr-cfg"); } catch (e) {} // older versions kept per-viewer edits
+  return structuredClone(OFFICIAL);
 }
-function merge(a, b) { for (const k in b) { if (a[k] && typeof a[k] === "object" && !Array.isArray(a[k])) merge(a[k], b[k]); else if (k in a) a[k] = b[k]; } return a; }
-function save() { try { localStorage.setItem("ttr-cfg", JSON.stringify(cfg)); } catch (e) {} }
+const isDraft = () => JSON.stringify(cfg) !== JSON.stringify(OFFICIAL);
+const isAdmin = () => location.hash === "#admin";
 
 /* ---------- classification ---------- */
 function category(m, side) {
@@ -601,11 +614,30 @@ function bindInputs() {
   for (const [id, , set] of BIND) document.getElementById(id).addEventListener("input", e => {
     const v = parseFloat(e.target.value); if (!isFinite(v)) return;
     if (id === "c-alpha" && (v <= 0 || v > 1)) return;
-    set(v); save(); clearTimeout(timer); timer = setTimeout(recompute, 250);
+    if (!isAdmin()) return;
+    set(v); clearTimeout(timer); timer = setTimeout(recompute, 250);
   });
-  $("#resetCfg").addEventListener("click", () => { cfg = structuredClone(DEFAULTS); save(); fillInputs(); recompute(); });
+  $("#discardDraft").addEventListener("click", () => { cfg = structuredClone(OFFICIAL); fillInputs(); recompute(); });
 }
 function fillInputs() { for (const [id, get] of BIND) document.getElementById(id).value = get(); }
+function fmtStamp(name) { const m = name.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/); return m ? fmtD(`${m[1]}-${m[2]}-${m[3]}`) : name; }
+function renderAdmin() {
+  const admin = isAdmin();
+  for (const [id] of BIND) document.getElementById(id).disabled = !admin;
+  $("#adminBar").hidden = !admin;
+  $("#draftBanner").hidden = admin || !isDraft();
+  $("#ptsNote").textContent = admin
+    ? "You are editing a draft. Changes apply only in this tab until you save them to GitHub."
+    : `This is the official points system, last changed ${fmtStamp(DATA.pointsFile)}. Only the site admin can change it.`;
+  if (!admin) return;
+  const d = new Date(), pad = n => String(n).padStart(2, "0");
+  const name = `points-${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}.json`;
+  const save = $("#saveGitHub");
+  save.href = `https://github.com/${DATA.repo}/new/main/data/points?filename=${encodeURIComponent(name)}&value=${encodeURIComponent(JSON.stringify(cfg, null, 2) + "\n")}`;
+  save.toggleAttribute("aria-disabled", !isDraft());
+  save.style.pointerEvents = isDraft() ? "" : "none"; save.style.opacity = isDraft() ? "" : ".4";
+  $("#draftStatus").textContent = isDraft() ? "Unsaved changes." : "No changes from the official points system yet.";
+}
 function renderPoints() {
   const cnt = {}; for (const m of R.log) if (m.result === "won") { const c = m.sides[0].cat; cnt[c] = (cnt[c] || 0) + 1; }
   for (const c of CATS) $("#cnt-" + c[0]).textContent = (cnt[c[0]] || 0).toLocaleString();
@@ -616,14 +648,16 @@ function renderPoints() {
 
 /* ---------- routing ---------- */
 const VIEWS = ["rankings", "history", "matches", "all-time", "points"];
+
 const RENDER = { rankings: renderRankings, history: renderHistory, matches: renderMatches, "all-time": renderAllTime, points: renderPoints };
 let dirty = new Set(VIEWS);
-function current() { const h = location.hash.slice(1); return VIEWS.includes(h) ? h : "rankings"; }
+function current() { const h = location.hash.slice(1); return h === "admin" ? "points" : VIEWS.includes(h) ? h : "rankings"; }
 function route() {
   const v = current();
   for (const x of VIEWS) document.getElementById("v-" + x).classList.toggle("on", x === v);
   document.querySelectorAll("nav.tabs a").forEach(a => { if (a.getAttribute("href") === "#" + v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   if (dirty.has(v)) { RENDER[v](); dirty.delete(v); }
+  renderAdmin();
 }
 function recompute() { R = run(); dirty = new Set(VIEWS); route(); renderMode(); }
 function renderMode() {

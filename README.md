@@ -31,7 +31,18 @@ A Test's match score is `100 + 4 × points`. Two rating types:
 - **Current form:** `new = old + 0.06 × (score − old)`. Recent Tests count most; a team drops out of the rankings after 4 years without a Test.
 - **All Tests to date:** the average match score over every Test the team has played, cushioned by 10 Tests at its starting rating. Nothing fades.
 
-England and Australia start at 100, later teams at 85. Every value can be changed in the app's Points system tab.
+England and Australia start at 100, later teams at 85. Visitors see these values read-only in the app's Points system tab.
+
+## Changing the points system (admin)
+
+The official points system is the newest file in [`data/points/`](data/points/); each change is a new `points-YYYYMMDD-HHMMSS.json` file, so the folder is also the history of every change.
+
+1. Open the app's hidden admin view: https://sameerumralkar.github.io/test-cricket-ratings/#admin
+2. Change any values. Every rating since 1877 is recalculated live, in your browser tab only.
+3. Click **Save to GitHub**. GitHub opens with the new settings filled in as a new file; click **Commit changes**.
+4. The Pages workflow rebuilds the site with the new points, usually within a minute or two.
+
+Only the repository owner can commit, so anyone else who finds `#admin` can preview changes but cannot publish them. An invalid file fails the build and the live site keeps its previous version.
 
 ## Charts
 
@@ -52,7 +63,7 @@ python3 scripts/plot_history.py              # one panel per team
 
 - `scripts/fetch_results.py` downloads all Test results from ESPNcricinfo Statsguru (home, away and neutral team results, plus the innings view to detect follow-ons) into `data/matches.json`. Tests still in progress are skipped.
 - `scripts/build.py` embeds the data and `data/team_colors.json` into `app/template.html`, producing `dist/index.html`.
-- `scripts/ratings_engine.py` is the Python version of the rating engine, used by the chart scripts.
+- `scripts/points.py` loads and checks the newest points file; `scripts/ratings_engine.py` is the Python version of the rating engine, used by the chart scripts.
 
 Pushing changes under `dist/` redeploys the site via GitHub Actions.
 
