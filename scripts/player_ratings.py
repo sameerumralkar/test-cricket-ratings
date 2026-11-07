@@ -176,6 +176,12 @@ def rating(s):
             + s["field"] * longevity(s["fi"]))
 
 
+def per_innings(s):
+    """Points per innings for batting, bowling and fielding, and their sum."""
+    pi = [s[k] * longevity(s[n]) / s[n] if s[n] else 0 for k, n in (("bat", "bi"), ("bowl", "wi"), ("field", "fi"))]
+    return [round(x, 1) for x in pi + [sum(pi)]]
+
+
 def main():
     suffix = sys.argv[1] if len(sys.argv) > 1 else "india"
     S, missing, n = compute(suffix)
@@ -193,12 +199,13 @@ def main():
                    + [f"{a}s" for a in ms] + ["twin_100s", "bowl_inns", "wkts", "best_match"]
                    + [f"{l}wi" for l in labels(P["bowl"]["hauls"], False)]
                    + [f"{l}wm" for l in labels(P["bowl"]["match"], True)] + ["field_inns", "ct_wk", "ct_field", "st", "bat_pts", "bowl_pts",
-                   "field_pts", "rating"])
+                   "field_pts", "rating", "bat_pts_per_inns", "bowl_pts_per_inns", "field_pts_per_inns",
+                   "points_per_innings"])
         for i, s in enumerate(rows, 1):
             w.writerow([i, s["name"], s["first"], s["last"], s["tests"], s["bi"], s["no"], s["runs"], s["hs"]]
                        + [s["ms"][a] for a in ms] + [s["twins"], s["wi"], s["wkts"], s["best"]] + s["hb"] + s["mb"] + [s["fi"], s["ctwk"], s["ctfi"], s["st"],
                        round(s["bat"] * longevity(s["bi"]), 1), round(s["bowl"] * longevity(s["wi"]), 1),
-                       round(s["field"] * longevity(s["fi"]), 1), round(rating(s), 1)])
+                       round(s["field"] * longevity(s["fi"]), 1), round(rating(s), 1)] + per_innings(s))
     print(f"wrote {out}")
 
 
