@@ -33,6 +33,23 @@ A Test's match score is `100 + 4 × points`. Two rating types:
 
 England and Australia start at 100, later teams at 85. Visitors see these values read-only in the app's Points system tab.
 
+## Player ratings (India)
+
+The **Players** tab rates every Indian Test player, Test by Test, from ESPNcricinfo's player innings lists. Rules are in [`data/player_points.json`](data/player_points.json).
+
+| | Points |
+|---|---|
+| Batting | 1 per run, plus the bonus for the highest milestone reached in an innings: 50 = 15, 100 = 30, 150 = 45, 200 = 60, 250 = 75, 300 = 100, 350 = 125, 400 = 150 |
+| Hundred in each innings | that Test's batting points × 1.5 |
+| Bowling | 15 per wicket, plus the highest innings haul bonus (5 = 15, 8 = 50, 10 = 100) and the highest match bonus (10 = 30, 13 = 60, 15 = 90, 16+ = 120) |
+| Fielding | 5 per catch (keeper or fielder) and per stumping; run outs score nothing |
+
+**Match context, from the team ratings.** Every Test's points are multiplied by venue (home ×1, neutral ×1.05, away ×1.1), the opponent's strength going into the Test (stronger ×1.15, same ×1, weaker ×0.9) and India's result (won ×1.1, drawn ×1, tied ×1.05, lost ×0.9). So a hundred in an away win over a stronger side is worth about 40% more than the same hundred in a home loss to a weaker side.
+
+**Longevity.** Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under 25 innings ×1, 25–50 ×1.1, then +0.1 for every further 25 innings (51–75 ×1.2, 76–100 ×1.3, …). The overall rating is the sum of the three.
+
+`python3 scripts/player_ratings.py` prints the top 25 and writes the full table to [`dist/players_india.csv`](dist/players_india.csv); `scripts/fetch_players.py` re-downloads the player data.
+
 ## Changing the points system (admin)
 
 The official points system is the newest file in [`data/points/`](data/points/); each change is a new `points-YYYYMMDD-HHMMSS.json` file, so the folder is also the history of every change.
@@ -55,7 +72,7 @@ One panel per team: [dist/ratings_history.svg](dist/ratings_history.svg)
 ## Updating
 
 ```sh
-./update.sh                                  # re-fetch every result and rebuild dist/index.html
+./update.sh                                  # re-fetch every result and player innings, rebuild dist/index.html
 python3 scripts/plot_combined.py             # combined chart, current form
 python3 scripts/plot_combined.py cumulative  # combined chart, all Tests to date
 python3 scripts/plot_history.py              # one panel per team

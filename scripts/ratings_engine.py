@@ -37,6 +37,11 @@ def year(d):
 
 
 
+def _strength(before, teams, t, band):
+    """How the opponent rated against team t going into the match."""
+    o = teams[1] if t == teams[0] else teams[0]
+    diff = before[o] - before[t]
+    return "stronger" if diff > band else "weaker" if diff < -band else "same"
 
 
 def compute(mode="form", band=None):
@@ -55,13 +60,13 @@ def compute(mode="form", band=None):
                 rating[t] = CFG["start"] if t in ("England", "Australia") else CFG["debut"]
                 hist[t] = []
                 total[t], played[t] = 0.0, 0
+        before = {t: rating[t] for t in teams}
+        # opponent strength going into the match, kept for the player ratings
+        m["strength"] = {t: _strength(before, teams, t, band) for t in teams}
         if m["result"] == "abandoned":
             continue
-        before = {t: rating[t] for t in teams}
         for t in teams:
-            o = teams[1] if t == teams[0] else teams[0]
-            diff = before[o] - before[t]
-            strength = "stronger" if diff > band else "weaker" if diff < -band else "same"
+            strength = m["strength"][t]
             venue = m["venue"][t]
             if m["result"] == "won":
                 base = CFG["pts"][category(m)][0 if m["winner"] == t else 1]

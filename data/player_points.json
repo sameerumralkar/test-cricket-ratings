@@ -1,0 +1,19 @@
+{
+  "bat": {
+    "run": 1,
+    "milestones": [[50, 15], [100, 30], [150, 45], [200, 60], [250, 75], [300, 100], [350, 125], [400, 150]],
+    "twin": 1.5
+  },
+  "bowl": {
+    "wkt": 15,
+    "hauls": [[5, 15], [8, 50], [10, 100]],
+    "match": [[10, 30], [13, 60], [15, 90], [16, 120]]
+  },
+  "field": {"keeperCatch": 5, "stumping": 5, "catch": 5},
+  "longevity": {"below": 25, "first": 1.1, "upto": 50, "step": 0.1, "every": 25},
+  "context": {
+    "venue": {"home": 1, "neutral": 1.05, "away": 1.1},
+    "opp": {"stronger": 1.15, "same": 1, "weaker": 0.9},
+    "result": {"won": 1.1, "drawn": 1, "tied": 1.05, "lost": 0.9, "abandoned": 1}
+  }
+}

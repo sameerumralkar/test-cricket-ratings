@@ -19,6 +19,20 @@ for m in matches:
     # [date, ground, teamA, teamB, venueOfA, result, winnerIdx, margin, followOnIdx]
     rows.append([m["date"], m["ground"], a, b, m["venue"][a], m["result"], w, m["margin"], fo])
 
+# Player innings for India, one row per Test:
+# [date, opp, ground, playerIdx[], bat[[idx, runs, notOut]], bowl[[idx, wkts]], field[[idx, ctWk, ctField, st]]]
+pdata = json.loads((ROOT / "data" / "players_india.json").read_text())
+pids = sorted(pdata["names"], key=int)
+pix = {p: i for i, p in enumerate(pids)}
+players = {
+    "team": "India",
+    "names": [pdata["names"][p] for p in pids],
+    "tests": [[t["date"], t["opp"], t["ground"], [pix[p] for p in t["players"]],
+               [[pix[r[0]], r[2], r[3]] for r in t["bat"]],
+               [[pix[r[0]], r[2]] for r in t["bowl"]],
+               [[pix[r[0]], r[2], r[3], r[4]] for r in t["field"]]] for t in pdata["tests"]],
+}
+
 payload = {
     "built": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
     "source": "ESPNcricinfo Statsguru - Test team results",
@@ -26,10 +40,12 @@ payload = {
     "points": POINTS,
     "pointsFile": POINTS_FILE,
     "repo": "sameerumralkar/test-cricket-ratings",
+    "players": players,
+    "playerPoints": json.loads((ROOT / "data" / "player_points.json").read_text()),
     "colors": {t: v["hex"] for t, v in json.loads((ROOT / "data" / "team_colors.json").read_text()).items()},
 }
 tpl = (ROOT / "app" / "template.html").read_text()
 out = tpl.replace('"__DATA__"', json.dumps(payload, separators=(",", ":"), ensure_ascii=False))
 (ROOT / "dist").mkdir(exist_ok=True)
 (ROOT / "dist" / "index.html").write_text(out)
-print(f"built dist/index.html with {len(rows)} Tests, points from {POINTS_FILE} ({len(out)//1024} KB)")
+print(f"built dist/index.html with {len(rows)} Tests, {len(players['names'])} Indian players, points from {POINTS_FILE} ({len(out)//1024} KB)")

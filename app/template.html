@@ -141,6 +141,7 @@ a.btn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
       <a href="#history">Rating history</a>
       <a href="#matches">Match log</a>
       <a href="#all-time">All-time</a>
+      <a href="#players">Players</a>
       <a href="#points">Points system</a>
     </nav>
   </div>
@@ -228,6 +229,47 @@ a.btn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
     <div class="panel tbl-wrap">
       <h3>By venue and opposition strength (W–L–D)</h3>
       <table id="splitTable"><thead><tr><th>Team</th><th>Home</th><th>Away</th><th>Neutral</th><th>v Stronger</th><th>v Same</th><th>v Weaker</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <!-- PLAYERS -->
+  <section class="view" id="v-players">
+    <div class="panel asof">
+      <label for="pAsof" class="muted">Indian player ratings after India's Test no.</label>
+      <div class="asof-label" id="pAsofLabel"></div>
+      <input type="range" id="pAsof" min="1" step="1">
+      <div class="row">
+        <button id="pPrev" type="button">◀ Previous Test</button>
+        <button id="pNext" type="button">Next Test ▶</button>
+        <button id="pLatest" type="button" class="primary">Latest</button>
+      </div>
+    </div>
+    <div class="panel row">
+      <div class="modebar" role="radiogroup" aria-label="Ranking" id="pDisc" style="margin:0">
+        <button type="button" role="radio" data-d="all">Overall</button>
+        <button type="button" role="radio" data-d="bat">Batting</button>
+        <button type="button" role="radio" data-d="bowl">Bowling</button>
+        <button type="button" role="radio" data-d="field">Fielding</button>
+      </div>
+      <input type="search" id="pSearch" placeholder="Find a player" aria-label="Find a player">
+      <label class="row" style="gap:6px"><input type="checkbox" id="pPlayedOnly"> Only players in this Test</label>
+      <span class="muted" id="pCount"></span>
+    </div>
+    <div class="panel" id="pDetail" hidden>
+      <div class="row" style="justify-content:space-between"><h3 id="pdName" style="margin:0"></h3><button type="button" id="pdClose">Close</button></div>
+      <p class="note" id="pdSummary"></p>
+      <div class="chart-box" style="height:300px"><canvas id="pChart" aria-label="Player rating after every Test"></canvas></div>
+      <div class="tbl-wrap" style="margin-top:12px; max-height:420px; overflow:auto">
+        <table id="pdTable"><thead><tr><th>Date</th><th>Opponent</th><th>Context</th><th class="n">×</th><th>Batting</th><th>Bowling</th><th class="n">Ct/St</th><th class="n">Points</th><th class="n">Rating</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="panel tbl-wrap">
+      <table id="pTable"><thead></thead><tbody></tbody></table>
+    </div>
+    <div class="pager"><button id="pMore" type="button">Show more</button></div>
+    <div class="panel prose">
+      <h3>How player points work</h3>
+      <div id="pRules"></div>
     </div>
   </section>
 
@@ -594,6 +636,145 @@ function renderAllTime() {
     return `<tr><td class="team">${sw(t)}${esc(t)}</td>${["home", "away", "neutral", "stronger", "same", "weaker"].map(k => `<td class="mono">${f(s[k])}</td>`).join("")}</tr>`; }).join("");
 }
 
+
+/* ---------- players ---------- */
+// Per-Test player rows for one team, from ESPNcricinfo player innings lists (embedded at build time).
+// Match context comes from the team engine: venue, result and opponent strength going into the Test.
+const PP = DATA.playerPoints, PD = DATA.players;
+const longevity = n => { const L = PP.longevity; return n < L.below ? 1 : n <= L.upto ? L.first : L.first + L.step * Math.ceil((n - L.upto) / L.every); };
+const tier = (x, list) => { let b = 0; for (const [at, p] of list) if (x >= at) b = p; return b; };
+const ctxMult = c => PP.context.venue[c.venue] * PP.context.opp[c.opp] * PP.context.result[c.result];
+let PR = null, pDisc = "all", pAsof = null, pLimit = 50, pSel = null, pChart;
+function runPlayers() {
+  const team = PD.team, idx = {};
+  R.log.forEach((m, i) => { const s = m.teams.indexOf(team); if (s >= 0) idx[m.date + "|" + m.teams[1 - s]] = i; });
+  const P = PD.names.map(name => ({ name, hist: [], s: null }));
+  const fresh = () => ({ tests: 0, bi: 0, no: 0, runs: 0, hs: 0, ms: PP.bat.milestones.map(() => 0), twins: 0,
+    wi: 0, wkts: 0, best: 0, w5: 0, w8: 0, w10i: 0, w10m: 0, fi: 0, ctwk: 0, ctfi: 0, st: 0, bat: 0, bowl: 0, field: 0, first: null });
+  const tests = [];
+  PD.tests.forEach(([date, opp, ground, players, bat, bowl, field], ti) => {
+    const li = idx[date + "|" + opp], m = li != null ? R.log[li] : null;
+    let ctx = { venue: "home", opp: "same", result: "drawn" }, known = false;
+    if (m) {
+      const sd = m.sides[m.teams.indexOf(team)]; known = true;
+      ctx = { venue: sd.venue, opp: sd.strength, result: { W: "won", L: "lost", D: "drawn", T: "tied", A: "abandoned" }[sd.outcome] };
+    }
+    const mult = known ? ctxMult(ctx) : 1;
+    tests.push({ date, opp, ground, ctx, mult, known, no: m ? m.no : null });
+    const by = (rows) => { const o = {}; for (const r of rows) (o[r[0]] = o[r[0]] || []).push(r); return o; };
+    const B = by(bat), W = by(bowl), F = by(field);
+    for (const pi of players) {
+      const p = P[pi], s = p.s ? { ...p.s, ms: p.s.ms.slice() } : fresh();
+      s.tests++; s.first = s.first || date;
+      const inns = B[pi] || [];
+      let bp = 0, hundreds = 0;
+      for (const [, runs, no] of inns) {
+        bp += runs * PP.bat.run + tier(runs, PP.bat.milestones);
+        if (runs >= 100) hundreds++;
+        s.bi++; s.no += no; s.runs += runs; s.hs = Math.max(s.hs, runs);
+        let k = -1; PP.bat.milestones.forEach(([at], j) => { if (runs >= at) k = j; }); if (k >= 0) s.ms[k]++;
+      }
+      if (hundreds >= 2) { bp *= PP.bat.twin; s.twins++; }
+      const ws = (W[pi] || []).map(r => r[1]), mw = ws.reduce((a, b) => a + b, 0);
+      let wp = ws.reduce((a, w) => a + w * PP.bowl.wkt + tier(w, PP.bowl.hauls), 0) + tier(mw, PP.bowl.match);
+      for (const w of ws) { s.wi++; s.wkts += w; if (w >= 10) s.w10i++; else if (w >= 8) s.w8++; else if (w >= 5) s.w5++; }
+      s.best = Math.max(s.best, mw); if (mw >= 10) s.w10m++;
+      const fs = F[pi] || [];
+      let fp = 0;
+      for (const [, a, b, c] of fs) { fp += a * PP.field.keeperCatch + b * PP.field.catch + c * PP.field.stumping; s.fi++; s.ctwk += a; s.ctfi += b; s.st += c; }
+      s.bat += bp * mult; s.bowl += wp * mult; s.field += fp * mult;
+      p.s = s;
+      p.hist.push({ ti, s, match: { runs: inns.map(r => r[1] + (r[2] ? "*" : "")), wkts: ws, ct: fs.reduce((a, r) => a + r[1] + r[2], 0), st: fs.reduce((a, r) => a + r[3], 0), pts: (bp + wp + fp) * mult } });
+    }
+  });
+  return { P, tests };
+}
+const pScores = s => { const bat = s.bat * longevity(s.bi), bowl = s.bowl * longevity(s.wi), field = s.field * longevity(s.fi); return { bat, bowl, field, all: bat + bowl + field }; };
+function pStateAt(p, ti) {
+  const h = p.hist; let lo = 0, hi = h.length - 1, ans = -1;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (h[mid].ti <= ti) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+  return ans < 0 ? null : h[ans];
+}
+const fmt0 = x => Math.round(x).toLocaleString();
+const ctxText = c => `${c.result} · ${c.venue} · v ${c.opp}`;
+function renderPlayers() {
+  if (!PR) PR = runPlayers();
+  const T = PR.tests, sl = $("#pAsof");
+  sl.max = T.length; if (pAsof == null || pAsof > T.length) pAsof = T.length; sl.value = pAsof;
+  const t = T[pAsof - 1];
+  $("#pAsofLabel").innerHTML = `India Test ${pAsof} of ${T.length} · ${fmtD(t.date)} · v ${esc(t.opp)}, ${esc(t.ground)} <span class="muted">· ${t.known ? esc(ctxText(t.ctx)) + " · × " + t.mult.toFixed(3) : "no team result"}</span>`;
+  $("#pPrev").disabled = pAsof <= 1; $("#pNext").disabled = pAsof >= T.length;
+  for (const b of document.querySelectorAll("#pDisc button")) b.setAttribute("aria-checked", String(b.dataset.d === pDisc));
+  const q = $("#pSearch").value.trim().toLowerCase(), only = $("#pPlayedOnly").checked;
+  let rows = [];
+  for (const p of PR.P) {
+    const h = pStateAt(p, pAsof - 1); if (!h) continue;
+    const sc = pScores(h.s);
+    rows.push({ p, h, s: h.s, sc, here: h.ti === pAsof - 1 });
+  }
+  rows.sort((a, b) => b.sc[pDisc] - a.sc[pDisc]);
+  rows.forEach((r, i) => r.rank = i + 1);
+  rows = rows.filter(r => (!q || r.p.name.toLowerCase().includes(q)) && (!only || r.here) && (pDisc === "all" || r.sc[pDisc] > 0 || q));
+  $("#pCount").textContent = `${rows.length.toLocaleString()} players`;
+  const ms = PP.bat.milestones.map(m => m[0]);
+  const head = {
+    all: ["Tests", "Span", "Batting", "Bowling", "Fielding", "Rating"],
+    bat: ["Tests", "Inns", "NO", "Runs", "HS", ...ms.map(m => m + "s"), "2×100", "× long.", "Points"],
+    bowl: ["Tests", "Inns", "Wkts", "Best match", "5wi", "8wi", "10wi", "10wm", "× long.", "Points"],
+    field: ["Tests", "Inns", "Ct (wk)", "Ct", "St", "× long.", "Points"]
+  }[pDisc];
+  $("#pTable thead").innerHTML = `<tr><th>#</th><th>Player</th>${head.map(h => `<th class="n">${h}</th>`).join("")}</tr>`;
+  const cell = (v, cls = "") => `<td class="n ${cls}">${v}</td>`;
+  $("#pTable tbody").innerHTML = rows.slice(0, pLimit).map(({ p, h, s, sc, rank, here }) => {
+    const span = `${s.first.slice(0, 4)}–${T[h.ti].date.slice(0, 4)}`;
+    let c;
+    if (pDisc === "all") c = [s.tests, span, fmt0(sc.bat), fmt0(sc.bowl), fmt0(sc.field)].map(v => cell(v)).join("") + cell(fmt0(sc.all), "rating");
+    else if (pDisc === "bat") c = [s.tests, s.bi, s.no, s.runs.toLocaleString(), s.hs, ...s.ms, s.twins, longevity(s.bi).toFixed(1)].map(v => cell(v)).join("") + cell(fmt0(sc.bat), "rating");
+    else if (pDisc === "bowl") c = [s.tests, s.wi, s.wkts, s.best, s.w5, s.w8, s.w10i, s.w10m, longevity(s.wi).toFixed(1)].map(v => cell(v)).join("") + cell(fmt0(sc.bowl), "rating");
+    else c = [s.tests, s.fi, s.ctwk, s.ctfi, s.st, longevity(s.fi).toFixed(1)].map(v => cell(v)).join("") + cell(fmt0(sc.field), "rating");
+    const pi = PR.P.indexOf(p);
+    return `<tr><td class="rank">${rank}</td><td class="team"><a href="#players" data-p="${pi}">${esc(p.name)}</a>${here ? ' <span class="chip">in this Test</span>' : ""}</td>${c}</tr>`;
+  }).join("");
+  $("#pMore").hidden = rows.length <= pLimit;
+  renderPlayerDetail();
+  const L = PP.longevity, B = PP.bat, W = PP.bowl, F = PP.field, C = PP.context;
+  $("#pRules").innerHTML = `
+    <p><b>Batting.</b> ${B.run} point per run, plus a bonus for the highest milestone reached in the innings: ${B.milestones.map(([a, p]) => `${a}+ = ${p}`).join(", ")}. A hundred in each innings of the same Test multiplies that Test's batting points by ${B.twin}.</p>
+    <p><b>Bowling.</b> ${W.wkt} points per wicket, plus the highest innings haul bonus: ${W.hauls.map(([a, p]) => `${a} wickets = ${p}`).join(", ")}; and the highest match bonus: ${W.match.map(([a, p], i) => `${a}${i === W.match.length - 1 ? "+" : ""} wickets = ${p}`).join(", ")}.</p>
+    <p><b>Fielding.</b> ${F.keeperCatch} points per wicketkeeper catch, ${F.stumping} per stumping, ${F.catch} per catch by any other fielder. Run outs score nothing.</p>
+    <p><b>Match context.</b> Each Test's points are multiplied by the context from the team ratings: venue (${Object.entries(C.venue).map(([k, v]) => `${k} ×${v}`).join(", ")}), opponent strength going into the Test (${Object.entries(C.opp).map(([k, v]) => `${k} ×${v}`).join(", ")}) and India's result (${Object.entries(C.result).map(([k, v]) => `${k} ×${v}`).join(", ")}). Opponent strength follows the rating type chosen at the top of the page.</p>
+    <p><b>Longevity.</b> Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under ${L.below} innings ×1, ${L.below}–${L.upto} ×${L.first}, then +${L.step} for every further ${L.every} innings (51–75 ×${(L.first + L.step).toFixed(1)}, 76–100 ×${(L.first + 2 * L.step).toFixed(1)}, …). The overall rating adds the three.</p>
+    <p class="note">Player data: ESPNcricinfo Statsguru player innings lists. Indian players only for now.</p>`;
+}
+function renderPlayerDetail() {
+  const box = $("#pDetail");
+  if (pSel == null) { box.hidden = true; return; }
+  const p = PR.P[pSel], T = PR.tests;
+  box.hidden = false;
+  const last = p.hist[p.hist.length - 1], sc = pScores(last.s), s = last.s;
+  $("#pdName").textContent = p.name;
+  $("#pdSummary").textContent = `${s.tests} Tests, ${T[p.hist[0].ti].date.slice(0, 4)}–${T[last.ti].date.slice(0, 4)}. ${s.runs.toLocaleString()} runs, ${s.wkts} wickets, ${s.ctwk + s.ctfi} catches, ${s.st} stumpings. Career rating ${fmt0(sc.all)} (batting ${fmt0(sc.bat)}, bowling ${fmt0(sc.bowl)}, fielding ${fmt0(sc.field)}).`;
+  $("#pdTable tbody").innerHTML = p.hist.slice().reverse().map(h => { const t = T[h.ti], mm = h.match;
+    return `<tr><td style="white-space:nowrap">${fmtD(t.date)}</td><td>v ${esc(t.opp)}<br><span class="muted">${esc(t.ground)}</span></td><td>${t.known ? esc(ctxText(t.ctx)) : "—"}</td><td class="n mono">${t.mult.toFixed(3)}</td>
+      <td class="mono">${mm.runs.join(" & ") || "—"}</td><td class="mono">${mm.wkts.length ? mm.wkts.join(" & ") + " wkts" : "—"}</td><td class="n">${mm.ct}/${mm.st}</td><td class="n pts pos">+${fmt0(mm.pts)}</td><td class="n">${fmt0(pScores(h.s).all)}</td></tr>`; }).join("");
+  const css = getComputedStyle(document.documentElement), ink = css.getPropertyValue("--muted").trim(), line = css.getPropertyValue("--line").trim();
+  const col = TEAM_COLORS[PD.team] || "#888";
+  const mk = (k, label, dash) => ({ label, data: p.hist.map(h => ({ x: h.ti + 1, y: Math.round(pScores(h.s)[k]) })), borderColor: col, backgroundColor: col, borderDash: dash, borderWidth: k === "all" ? 2.4 : 1.4, pointRadius: 0, pointHoverRadius: 4, stepped: true });
+  const sets = [mk("all", "Overall", [])];
+  if (sc.bat > 0 && sc.bat < sc.all) sets.push(mk("bat", "Batting", [6, 3]));
+  if (sc.bowl > 0 && sc.bowl < sc.all) sets.push(mk("bowl", "Bowling", [2, 3]));
+  // Dark team colours get a light outline in dark mode, as on the team history chart.
+  if (needsHalo(PD.team)) for (const d of sets.slice()) sets.push({ ...d, label: d.label, halo: true, borderColor: css.getPropertyValue("--halo").trim(), borderWidth: d.borderWidth + 2.5, order: 2 });
+  sets.forEach(d => d.order = d.order || 1);
+  if (pChart) pChart.destroy();
+  pChart = new Chart($("#pChart"), { type: "line", data: { datasets: sets }, options: { animation: false, maintainAspectRatio: false, parsing: false,
+    interaction: { mode: "index", intersect: false },
+    scales: { x: { type: "linear", ticks: { color: ink }, grid: { color: line }, title: { display: true, text: "India Test no.", color: ink } },
+      y: { beginAtZero: true, ticks: { color: ink }, grid: { color: line }, title: { display: true, text: "Rating", color: ink } } },
+    plugins: { legend: { display: sets.filter(d => !d.halo).length > 1, labels: { color: ink, filter: it => !sets[it.datasetIndex].halo } }, tooltip: { filter: it => !it.dataset.halo, callbacks: {
+      title: it => { const t = T[it[0].raw.x - 1]; return `${fmtD(t.date)} · v ${t.opp}`; } } } } } });
+}
+
 /* ---------- points config ---------- */
 const BIND = [];
 function bindInputs() {
@@ -647,9 +828,9 @@ function renderPoints() {
 }
 
 /* ---------- routing ---------- */
-const VIEWS = ["rankings", "history", "matches", "all-time", "points"];
+const VIEWS = ["rankings", "history", "matches", "all-time", "players", "points"];
 
-const RENDER = { rankings: renderRankings, history: renderHistory, matches: renderMatches, "all-time": renderAllTime, points: renderPoints };
+const RENDER = { rankings: renderRankings, history: renderHistory, matches: renderMatches, "all-time": renderAllTime, players: renderPlayers, points: renderPoints };
 let dirty = new Set(VIEWS);
 function current() { const h = location.hash.slice(1); return h === "admin" ? "points" : VIEWS.includes(h) ? h : "rankings"; }
 function route() {
@@ -659,9 +840,9 @@ function route() {
   if (dirty.has(v)) { RENDER[v](); dirty.delete(v); }
   renderAdmin();
 }
-function recompute() { R = run(); dirty = new Set(VIEWS); route(); renderMode(); }
+function recompute() { R = run(); PR = null; dirty = new Set(VIEWS); route(); renderMode(); }
 function renderMode() {
-  for (const b of document.querySelectorAll(".modebar button")) b.setAttribute("aria-checked", String(b.dataset.mode === MODE));
+  for (const b of document.querySelectorAll(".modebar button[data-mode]")) b.setAttribute("aria-checked", String(b.dataset.mode === MODE));
   $("#modeNote").textContent = MODE === "cumulative"
     ? "Every Test since a team's debut counts equally; old results never fade."
     : `Recent Tests count most and old results fade (each Test moves the rating ${Math.round(cfg.alpha * 100)}% of the way to its match score).`;
@@ -681,7 +862,17 @@ function init() {
   $("#nextT").addEventListener("click", () => { asof++; renderRankings(); });
   $("#latestT").addEventListener("click", () => { asof = R.log.length; renderRankings(); });
   $("#showInactive").addEventListener("change", renderRankings);
-  for (const b of document.querySelectorAll(".modebar button")) b.addEventListener("click", () => {
+  $("#pAsof").addEventListener("input", e => { pAsof = +e.target.value; renderPlayers(); });
+  $("#pPrev").addEventListener("click", () => { pAsof--; renderPlayers(); });
+  $("#pNext").addEventListener("click", () => { pAsof++; renderPlayers(); });
+  $("#pLatest").addEventListener("click", () => { pAsof = PR.tests.length; renderPlayers(); });
+  $("#pSearch").addEventListener("input", () => { pLimit = 50; renderPlayers(); });
+  $("#pPlayedOnly").addEventListener("change", renderPlayers);
+  $("#pMore").addEventListener("click", () => { pLimit += 50; renderPlayers(); });
+  $("#pdClose").addEventListener("click", () => { pSel = null; renderPlayerDetail(); });
+  for (const b of document.querySelectorAll("#pDisc button")) b.addEventListener("click", () => { pDisc = b.dataset.d; pLimit = 50; renderPlayers(); });
+  document.addEventListener("click", e => { const a = e.target.closest("a[data-p]"); if (!a) return; e.preventDefault(); pSel = +a.dataset.p; renderPlayerDetail(); $("#pDetail").scrollIntoView({ block: "start" }); });
+  for (const b of document.querySelectorAll(".modebar button[data-mode]")) b.addEventListener("click", () => {
     if (MODE === b.dataset.mode) return;
     MODE = b.dataset.mode; try { localStorage.setItem("ttr-mode", MODE); } catch (e) {}
     recompute();
