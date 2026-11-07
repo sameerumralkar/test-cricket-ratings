@@ -252,6 +252,8 @@ a.btn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
         <button type="button" role="radio" data-d="field">Fielding</button>
       </div>
       <input type="search" id="pSearch" placeholder="Find a player" aria-label="Find a player">
+      <label class="row" style="gap:6px">Sort by <select id="pSort"><option value="total">Total points</option><option value="pi">Points per innings</option></select></label>
+      <label class="row" style="gap:6px" title="Batting, bowling or fielding innings on those tabs; innings in the field on Overall">Min. innings <input type="number" id="pMin" min="0" step="5" value="0" style="width:64px"></label>
       <label class="row" style="gap:6px"><input type="checkbox" id="pPlayedOnly"> Only players in this Test</label>
       <span class="muted" id="pCount"></span>
     </div>
@@ -728,7 +730,13 @@ function renderPlayers() {
     const sc = pScores(h.s);
     rows.push({ p, h, s: h.s, sc, here: h.ti === pAsof - 1 });
   }
-  rows.sort((a, b) => b.sc[pDisc] - a.sc[pDisc]);
+  // Sort by total points or points per innings; ranks count only players with at least the minimum innings
+  // (in this tab's discipline; innings in the field for Overall), so a short career can't top a per-innings list.
+  const key = $("#pSort").value === "pi" ? pDisc + "PI" : pDisc;
+  const inns = s => ({ all: s.fi, bat: s.bi, bowl: s.wi, field: s.fi })[pDisc];
+  const minI = Math.max(0, +$("#pMin").value || 0);
+  rows = rows.filter(r => inns(r.s) >= minI);
+  rows.sort((a, b) => b.sc[key] - a.sc[key] || b.sc[pDisc] - a.sc[pDisc]);
   rows.forEach((r, i) => r.rank = i + 1);
   rows = rows.filter(r => (!q || r.p.name.toLowerCase().includes(q)) && (!only || r.here) && (pDisc === "all" || r.sc[pDisc] > 0 || q));
   $("#pCount").textContent = `${rows.length.toLocaleString()} players`;
@@ -739,7 +747,8 @@ function renderPlayers() {
     bowl: ["Tests", "Inns", "Wkts", "Best match", ...bandLabels(PP.bowl.hauls, false).map(l => `<span title="Innings with ${l} wickets">${l} WI</span>`), ...bandLabels(PP.bowl.match, true).map(l => `<span title="Tests with ${l} wickets in the match">${l} WM</span>`), "× long.", "Points", "Pts / Inns"],
     field: ["Tests", "Inns", "Ct (wk)", "Ct", "St", "× long.", "Points", "Pts / Inns"]
   }[pDisc];
-  $("#pTable thead").innerHTML = `<tr><th>#</th><th>Player</th>${head.map(h => `<th class="n">${h}</th>`).join("")}</tr>`;
+  const sortedCol = head.length - ($("#pSort").value === "pi" ? 1 : 2);
+  $("#pTable thead").innerHTML = `<tr><th>#</th><th>Player</th>${head.map((h, i) => `<th class="n"${i === sortedCol ? ' aria-sort="descending" style="color:var(--ink)"' : ""}>${h}${i === sortedCol ? " ▼" : ""}</th>`).join("")}</tr>`;
   const cell = (v, cls = "") => `<td class="n ${cls}">${v}</td>`;
   $("#pTable tbody").innerHTML = rows.slice(0, pLimit).map(({ p, h, s, sc, rank, here }) => {
     const span = `${s.first.slice(0, 4)}–${T[h.ti].date.slice(0, 4)}`;
@@ -939,6 +948,9 @@ function init() {
   $("#pLatest").addEventListener("click", () => { pAsof = PR.tests.length; renderPlayers(); });
   $("#pSearch").addEventListener("input", () => { pLimit = 50; renderPlayers(); });
   $("#pPlayedOnly").addEventListener("change", renderPlayers);
+  // Switching to points per innings suggests a 20-innings minimum (if none is set); it can be changed freely.
+  $("#pSort").addEventListener("change", e => { if (e.target.value === "pi" && !+$("#pMin").value) $("#pMin").value = 20; pLimit = 50; renderPlayers(); });
+  $("#pMin").addEventListener("input", () => { pLimit = 50; renderPlayers(); });
   $("#pMore").addEventListener("click", () => { pLimit += 50; renderPlayers(); });
   $("#pdClose").addEventListener("click", () => { pSel = null; renderPlayerDetail(); });
   for (const b of document.querySelectorAll("#pDisc button")) b.addEventListener("click", () => { pDisc = b.dataset.d; pLimit = 50; renderPlayers(); });
