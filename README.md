@@ -33,22 +33,22 @@ A Test's match score is `100 + 4 × points`. Two rating types:
 
 England and Australia start at 100, later teams at 85. Visitors see these values read-only in the app's Points system tab.
 
-## Player ratings (India)
+## Player ratings
 
-The **Players** tab rates every Indian Test player, Test by Test, from ESPNcricinfo's player innings lists. The official rules are the newest file in [`data/player_points/`](data/player_points/), which the admin changes the same way as the team points (see below).
+The **Players** tab rates every Test player of all 12 Test nations, Test by Test, from ESPNcricinfo's player innings lists. The official rules are the newest file in [`data/player_points/`](data/player_points/), which the admin changes the same way as the team points (see below).
 
 | | Points |
 |---|---|
 | Batting | 1 per run, plus the bonus for the highest milestone reached in an innings: 50 = 15, 100 = 30, 150 = 45, 200 = 60, 250 = 75, 300 = 100, 350 = 125, 400 = 150 |
 | Hundred in each innings | that Test's batting points × 1.5 |
 | Bowling | 15 per wicket, plus the highest innings haul bonus (5 = 15, 8 = 50, 10 = 100) and the highest match bonus (10 = 30, 13 = 60, 15 = 90, 16+ = 120) |
-| Fielding | 5 per catch (keeper or fielder) and per stumping; run outs score nothing |
+| Fielding | 10 per wicketkeeper catch and per stumping, 5 per catch by any other fielder; run outs score nothing |
 
-**Match context, from the team ratings.** Every Test's points are multiplied by venue (home ×1, neutral ×1.05, away ×1.1), the opponent's strength going into the Test (stronger ×1.15, same ×1, weaker ×0.9) and India's result (won ×1.1, drawn ×1, tied ×1.05, lost ×0.9). So a hundred in an away win over a stronger side is worth about 40% more than the same hundred in a home loss to a weaker side.
+**Match context, from the team ratings.** Every Test's points are multiplied by venue (home ×1, neutral ×1.05, away ×1.1), the opponent's strength going into the Test (stronger ×1.15, same ×1, weaker ×0.9) and India's result (won ×1.1, drawn ×1, tied ×1.05, lost ×0.9). Context uses the player's own team: so for an Indian player, a hundred in an away win over a stronger side is worth 1.39× and the same hundred in a home loss to a weaker side 0.81×.
 
 **Longevity.** Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under 25 innings ×1, 25–50 ×1.1, then +0.1 for every further 25 innings (51–75 ×1.2, 76–100 ×1.3, …). The overall rating is the sum of the three.
 
-`python3 scripts/player_ratings.py` prints the top 25 and writes the full table to [`dist/players_india.csv`](dist/players_india.csv); `scripts/fetch_players.py` re-downloads the player data.
+Each team's player data is `data/players/<team>.json`; a player who played for two countries has a separate entry for each. `python3 scripts/player_ratings.py` prints each team's top players and writes the full tables to [`dist/players/`](dist/players/) (`india.csv`, `england.csv`, …). `python3 scripts/fetch_players.py` fetches only Tests since each file's last one (the last 60 days are re-fetched to pick up corrections); `--full` re-downloads everything, which takes about two hours.
 
 ## Changing the points (admin)
 
@@ -75,7 +75,7 @@ One panel per team: [dist/ratings_history.svg](dist/ratings_history.svg)
 ## Updating
 
 ```sh
-./update.sh                                  # re-fetch every result and player innings, rebuild dist/index.html
+./update.sh                                  # re-fetch every result and recent player innings, rebuild dist/
 python3 scripts/plot_combined.py             # combined chart, current form
 python3 scripts/plot_combined.py cumulative  # combined chart, all Tests to date
 python3 scripts/plot_history.py              # one panel per team

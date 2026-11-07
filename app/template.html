@@ -235,7 +235,7 @@ a.btn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
   <!-- PLAYERS -->
   <section class="view" id="v-players">
     <div class="panel asof">
-      <label for="pAsof" class="muted">Indian player ratings after India's Test no.</label>
+      <div class="row"><label for="pTeam">Team</label> <select id="pTeam"></select> <span class="muted" id="pAsofIntro"></span></div>
       <div class="asof-label" id="pAsofLabel"></div>
       <input type="range" id="pAsof" min="1" step="1">
       <div class="row">
@@ -648,7 +648,11 @@ function renderAllTime() {
 /* ---------- players ---------- */
 // Per-Test player rows for one team, from ESPNcricinfo player innings lists (embedded at build time).
 // Match context comes from the team engine: venue, result and opponent strength going into the Test.
-const OFFICIAL_PP = DATA.playerPoints, PD = DATA.players;
+const OFFICIAL_PP = DATA.playerPoints;
+// Each team's player data is a separate file (players/<slug>.json), fetched the first time that team is picked.
+let PD = null, pTeam = "india";
+try { const t = localStorage.getItem("ttr-pteam"); if (DATA.playerTeams.some(x => x.slug === t)) pTeam = t; } catch (e) {}
+const PCACHE = {};
 let PP = structuredClone(OFFICIAL_PP); // official player points, or the admin's unsaved draft
 const longevity = n => { const L = PP.longevity; return n < L.below ? 1 : n <= L.upto ? L.first : L.first + L.step * Math.ceil((n - L.upto) / L.every); };
 const band = (x, list) => { let k = -1; list.forEach(([at], j) => { if (x >= at) k = j; }); return k; };
@@ -716,11 +720,23 @@ function pStateAt(p, ti) {
 const fmt0 = x => Math.round(x).toLocaleString();
 const ctxText = c => `${c.result} · ${c.venue} · v ${c.opp}`;
 function renderPlayers() {
+  if (!PD || PD.slug !== pTeam) {
+    const slug = pTeam;
+    if (PCACHE[slug]) { PD = PCACHE[slug]; PR = null; }
+    else {
+      $("#pTable tbody").innerHTML = `<tr><td colspan="9" class="muted">Loading players…</td></tr>`;
+      fetch(`players/${slug}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(d => { d.slug = slug; PCACHE[slug] = d; if (pTeam === slug) renderPlayers(); })
+        .catch(e => { $("#pTable tbody").innerHTML = `<tr><td colspan="9">Could not load the ${esc(slug)} player file (${esc(e.message)}).</td></tr>`; });
+      return;
+    }
+  }
   if (!PR) PR = runPlayers();
+  $("#pAsofIntro").textContent = `player ratings after each of ${PD.team}'s Tests`;
   const T = PR.tests, sl = $("#pAsof");
   sl.max = T.length; if (pAsof == null || pAsof > T.length) pAsof = T.length; sl.value = pAsof;
   const t = T[pAsof - 1];
-  $("#pAsofLabel").innerHTML = `India Test ${pAsof} of ${T.length} · ${fmtD(t.date)} · v ${esc(t.opp)}, ${esc(t.ground)} <span class="muted">· ${t.known ? esc(ctxText(t.ctx)) + " · × " + t.mult.toFixed(3) : "no team result"}</span>`;
+  $("#pAsofLabel").innerHTML = `${esc(PD.team)} Test ${pAsof} of ${T.length} · ${fmtD(t.date)} · v ${esc(t.opp)}, ${esc(t.ground)} <span class="muted">· ${t.known ? esc(ctxText(t.ctx)) + " · × " + t.mult.toFixed(3) : "no team result"}</span>`;
   $("#pPrev").disabled = pAsof <= 1; $("#pNext").disabled = pAsof >= T.length;
   for (const b of document.querySelectorAll("#pDisc button")) b.setAttribute("aria-checked", String(b.dataset.d === pDisc));
   const q = $("#pSearch").value.trim().toLowerCase(), only = $("#pPlayedOnly").checked;
@@ -767,10 +783,10 @@ function renderPlayers() {
     <p><b>Batting.</b> ${B.run} point per run, plus a bonus for the highest milestone reached in the innings: ${B.milestones.map(([a, p]) => `${a}+ = ${p}`).join(", ")}. A hundred in each innings of the same Test multiplies that Test's batting points by ${B.twin}.</p>
     <p><b>Bowling.</b> ${W.wkt} points per wicket, plus a bonus for every haul, counted once at its own level (an 8-wicket innings earns the 8-wicket bonus only, not the 5-wicket one too). Innings: ${W.hauls.map(([a, p]) => `${a} wickets = ${p}`).join(", ")}; and the highest match bonus: ${W.match.map(([a, p], i) => `${a}${i === W.match.length - 1 ? "+" : ""} wickets = ${p}`).join(", ")}.</p>
     <p><b>Fielding.</b> ${F.keeperCatch} points per wicketkeeper catch, ${F.stumping} per stumping, ${F.catch} per catch by any other fielder. Run outs score nothing.</p>
-    <p><b>Match context.</b> Each Test's points are multiplied by the context from the team ratings: venue (${Object.entries(C.venue).map(([k, v]) => `${k} ×${v}`).join(", ")}), opponent strength going into the Test (${Object.entries(C.opp).map(([k, v]) => `${k} ×${v}`).join(", ")}) and India's result (${Object.entries(C.result).map(([k, v]) => `${k} ×${v}`).join(", ")}). Opponent strength follows the rating type chosen at the top of the page.</p>
+    <p><b>Match context.</b> Each Test's points are multiplied by the context from the team ratings: venue (${Object.entries(C.venue).map(([k, v]) => `${k} ×${v}`).join(", ")}), opponent strength going into the Test (${Object.entries(C.opp).map(([k, v]) => `${k} ×${v}`).join(", ")}) and ${esc(PD.team)}'s result (${Object.entries(C.result).map(([k, v]) => `${k} ×${v}`).join(", ")}). Opponent strength follows the rating type chosen at the top of the page.</p>
     <p><b>Longevity.</b> Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under ${L.below} innings ×1, ${L.below}–${L.upto} ×${L.first}, then +${L.step} for every further ${L.every} innings (51–75 ×${(L.first + L.step).toFixed(1)}, 76–100 ×${(L.first + 2 * L.step).toFixed(1)}, …). The overall rating adds the three.</p>
     <p><b>Points per innings.</b> Each tab divides that discipline's points (after context and longevity) by its innings: batting innings, bowling innings, innings in the field. Points / Innings on the Overall tab adds the three.</p>
-    <p class="note">Every value is listed under <a href="#points">Points system</a>, last changed ${fmtStamp(DATA.playerPointsFile)}. Player data: ESPNcricinfo Statsguru player innings lists. Indian players only for now.</p>`;
+    <p class="note">Every value is listed under <a href="#points">Points system</a>, last changed ${fmtStamp(DATA.playerPointsFile)}. Player data: ESPNcricinfo Statsguru player innings lists, per team: a player who played for two countries has a separate entry for each.</p>`;
 }
 function renderPlayerDetail() {
   const box = $("#pDetail");
@@ -796,7 +812,7 @@ function renderPlayerDetail() {
   if (pChart) pChart.destroy();
   pChart = new Chart($("#pChart"), { type: "line", data: { datasets: sets }, options: { animation: false, maintainAspectRatio: false, parsing: false,
     interaction: { mode: "index", intersect: false },
-    scales: { x: { type: "linear", ticks: { color: ink }, grid: { color: line }, title: { display: true, text: "India Test no.", color: ink } },
+    scales: { x: { type: "linear", ticks: { color: ink }, grid: { color: line }, title: { display: true, text: `${PD.team} Test no.`, color: ink } },
       y: { beginAtZero: true, ticks: { color: ink }, grid: { color: line }, title: { display: true, text: "Rating", color: ink } } },
     plugins: { legend: { display: sets.filter(d => !d.halo).length > 1, labels: { color: ink, filter: it => !sets[it.datasetIndex].halo } }, tooltip: { filter: it => !it.dataset.halo, callbacks: {
       title: it => { const t = T[it[0].raw.x - 1]; return `${fmtD(t.date)} · v ${t.opp}`; } } } } } });
@@ -942,6 +958,12 @@ function init() {
   $("#nextT").addEventListener("click", () => { asof++; renderRankings(); });
   $("#latestT").addEventListener("click", () => { asof = R.log.length; renderRankings(); });
   $("#showInactive").addEventListener("change", renderRankings);
+  $("#pTeam").innerHTML = DATA.playerTeams.slice().sort((a, b) => a.team.localeCompare(b.team)).map(t => `<option value="${t.slug}"${t.slug === pTeam ? " selected" : ""}>${esc(t.team)} (${t.players} players)</option>`).join("");
+  $("#pTeam").addEventListener("change", e => {
+    pTeam = e.target.value; pAsof = null; pSel = null; pLimit = 50; $("#pSearch").value = "";
+    try { localStorage.setItem("ttr-pteam", pTeam); } catch (err) {}
+    renderPlayers();
+  });
   $("#pAsof").addEventListener("input", e => { pAsof = +e.target.value; renderPlayers(); });
   $("#pPrev").addEventListener("click", () => { pAsof--; renderPlayers(); });
   $("#pNext").addEventListener("click", () => { pAsof++; renderPlayers(); });

@@ -11,7 +11,8 @@ the same or weaker going into the match. A player's rating after any Test is
 
 where each longevity multiplier depends on that discipline's innings count so far.
 
-Usage:  python3 scripts/player_ratings.py [india]   -> prints the top 25, writes dist/players_<team>.csv
+Usage:  python3 scripts/player_ratings.py [all|india|england|...] [top N]
+        -> prints the top players and writes dist/players/<team>.csv
 """
 import csv
 import json
@@ -23,7 +24,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from points import latest_player  # noqa: E402
 PLAYER_POINTS_FILE, P = latest_player()  # newest file in data/player_points/
-TEAM_NAME = {"india": "India"}
 
 
 def longevity(n, L=P["longevity"]):
@@ -88,11 +88,17 @@ def context(m, team):
     return C["venue"][venue] * C["opp"][opp] * C["result"][res], {"venue": venue, "opp": opp, "result": res}
 
 
-def compute(suffix="india"):
+_TEAM_MATCHES = None
+
+
+def compute(slug="india"):
+    global _TEAM_MATCHES
     from ratings_engine import compute as team_compute
-    team = TEAM_NAME[suffix]
-    data = json.loads((ROOT / "data" / f"players_{suffix}.json").read_text())
-    matches, _ = team_compute()
+    data = json.loads((ROOT / "data" / "players" / f"{slug}.json").read_text())
+    team = data["team"]
+    if _TEAM_MATCHES is None:
+        _TEAM_MATCHES, _ = team_compute()
+    matches = _TEAM_MATCHES
     by_key = {}
     for m in matches:
         if team in m["teams"]:
@@ -112,7 +118,9 @@ def compute(suffix="india"):
 
     for t in data["tests"]:
         m = by_key.get((t["date"], t["opp"]))
-        missing += m is None
+        if m is None:  # no team result yet: the Test is still in progress
+            missing += 1
+            continue
         mult, ctx = context(m, team)
         bat, bowl, field = {}, {}, {}
         for pid, inns, runs, notout in t["bat"]:
@@ -168,7 +176,7 @@ def compute(suffix="india"):
             s["field"] += pts * mult
             s["hist"].append((t["date"], rating(s)))
         _ = ctx
-    return S, missing, len(data["tests"])
+    return S, missing, len(data["tests"]) - missing
 
 
 def rating(s):
@@ -183,15 +191,23 @@ def per_innings(s):
 
 
 def main():
-    suffix = sys.argv[1] if len(sys.argv) > 1 else "india"
+    arg = sys.argv[1] if len(sys.argv) > 1 else "all"
+    slugs = sorted(f.stem for f in (ROOT / "data" / "players").glob("*.json")) if arg == "all" else [arg]
+    top = int(sys.argv[2]) if len(sys.argv) > 2 else (25 if len(slugs) == 1 else 5)
+    for slug in slugs:
+        report(slug, top)
+
+
+def report(suffix, top):
     S, missing, n = compute(suffix)
     rows = sorted(S.values(), key=lambda s: -rating(s))
-    print(f"{n} Tests, {len(S)} players, {missing} Tests not matched to team results")
-    for i, s in enumerate(rows[:25], 1):
+    print(f"{suffix}: {n} Tests, {len(S)} players, {missing} in progress (left out)")
+    for i, s in enumerate(rows[:top], 1):
         print(f"{i:>3}. {s['name']:<22} {rating(s):8.0f}  bat {s['bat'] * longevity(s['bi']):7.0f} "
               f"bowl {s['bowl'] * longevity(s['wi']):7.0f} field {s['field'] * longevity(s['fi']):5.0f}  "
               f"T{s['tests']} R{s['runs']} W{s['wkts']}")
-    out = ROOT / "dist" / f"players_{suffix}.csv"
+    (ROOT / "dist" / "players").mkdir(parents=True, exist_ok=True)
+    out = ROOT / "dist" / "players" / f"{suffix}.csv"
     with out.open("w", newline="") as f:
         w = csv.writer(f)
         ms = [at for at, _ in P["bat"]["milestones"]]
@@ -206,7 +222,7 @@ def main():
                        + [s["ms"][a] for a in ms] + [s["twins"], s["wi"], s["wkts"], s["best"]] + s["hb"] + s["mb"] + [s["fi"], s["ctwk"], s["ctfi"], s["st"],
                        round(s["bat"] * longevity(s["bi"]), 1), round(s["bowl"] * longevity(s["wi"]), 1),
                        round(s["field"] * longevity(s["fi"]), 1), round(rating(s), 1)] + per_innings(s))
-    print(f"wrote {out}")
+    print(f"wrote {out.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
