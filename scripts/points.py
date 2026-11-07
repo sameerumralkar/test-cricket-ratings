@@ -57,3 +57,47 @@ def latest():
         return f.name, validate(json.loads(f.read_text()))
     except (ValueError, json.JSONDecodeError) as e:
         raise SystemExit(f"{f.name} is not a valid points file: {e}")
+
+
+# ---------- player points: the newest file in data/player_points/ ----------
+PLAYER_DIR = ROOT / "data" / "player_points"
+
+
+def _pairs(v, name, n):
+    if not (isinstance(v, list) and len(v) == n and all(isinstance(p, list) and len(p) == 2 and all(map(_num, p)) for p in v)):
+        raise ValueError(f"'{name}' must be {n} [at, points] pairs")
+    if [p[0] for p in v] != sorted(p[0] for p in v):
+        raise ValueError(f"'{name}' thresholds must go up")
+
+
+def validate_player(cfg):
+    """Raise ValueError if the player points file is missing a value or has a bad one."""
+    try:
+        b, w, f, L, c = cfg["bat"], cfg["bowl"], cfg["field"], cfg["longevity"], cfg["context"]
+        nums = [b["run"], b["twin"], w["wkt"], f["keeperCatch"], f["stumping"], f["catch"],
+                L["below"], L["first"], L["upto"], L["step"], L["every"]]
+        nums += [c["venue"][k] for k in ("home", "neutral", "away")]
+        nums += [c["opp"][k] for k in ("stronger", "same", "weaker")]
+        nums += [c["result"][k] for k in ("won", "drawn", "tied", "lost", "abandoned")]
+    except (KeyError, TypeError) as e:
+        raise ValueError(f"missing {e}")
+    if not all(map(_num, nums)):
+        raise ValueError("every value must be a number")
+    _pairs(b["milestones"], "bat.milestones", 8)
+    _pairs(w["hauls"], "bowl.hauls", 3)
+    _pairs(w["match"], "bowl.match", 4)
+    if L["every"] <= 0 or L["upto"] < L["below"]:
+        raise ValueError("'longevity.every' must be above 0 and 'upto' at least 'below'")
+    return cfg
+
+
+def latest_player():
+    """Return (filename, config) for the newest player points file."""
+    files = sorted(PLAYER_DIR.glob("player-points-*.json"))
+    if not files:
+        raise FileNotFoundError(f"no player-points-*.json in {PLAYER_DIR}")
+    f = files[-1]
+    try:
+        return f.name, validate_player(json.loads(f.read_text()))
+    except (ValueError, json.JSONDecodeError) as e:
+        raise SystemExit(f"{f.name} is not a valid player points file: {e}")

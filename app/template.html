@@ -277,10 +277,11 @@ a.btn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
   <section class="view" id="v-points">
     <div class="panel adminbar" id="adminBar" hidden>
       <h3>Admin: edit the points system</h3>
-      <p>Change any value below. Every rating since 1877 is worked out again, but only in this browser tab. Nobody else sees your changes until you save them.</p>
+      <p>Change any value below: the team points, or the player points further down. Every rating is worked out again, but only in this browser tab. Nobody else sees your changes until you save them. Team and player points are saved separately.</p>
       <p class="note">Saving opens GitHub with the new settings filled in as a new file. Click <b>Commit changes</b> there; the site rebuilds with the new points in about a minute. Only the repository owner can commit, so other visitors who find this page cannot change anything.</p>
       <div class="row">
-        <a class="btn primary" id="saveGitHub" target="_blank" rel="noopener">Save to GitHub</a>
+        <a class="btn primary" id="saveGitHub" target="_blank" rel="noopener">Save team points to GitHub</a>
+        <a class="btn primary" id="savePlayerGitHub" target="_blank" rel="noopener">Save player points to GitHub</a>
         <button id="discardDraft" type="button">Discard changes</button>
         <span class="note" id="draftStatus"></span>
       </div>
@@ -336,6 +337,9 @@ a.btn:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
         <p class="note" id="example"></p>
       </div>
     </div>
+    <h2 id="player-points">Player points</h2>
+    <p class="note" id="pptsNote"></p>
+    <div class="grid2" id="pptsGrid"></div>
   </section>
 
   <p class="note" id="foot"></p>
@@ -369,7 +373,9 @@ function load() {
   try { localStorage.removeItem("ttr-cfg"); } catch (e) {} // older versions kept per-viewer edits
   return structuredClone(OFFICIAL);
 }
-const isDraft = () => JSON.stringify(cfg) !== JSON.stringify(OFFICIAL);
+const isTeamDraft = () => JSON.stringify(cfg) !== JSON.stringify(OFFICIAL);
+const isPlayerDraft = () => JSON.stringify(PP) !== JSON.stringify(OFFICIAL_PP);
+const isDraft = () => isTeamDraft() || isPlayerDraft();
 const isAdmin = () => location.hash === "#admin";
 
 /* ---------- classification ---------- */
@@ -640,7 +646,8 @@ function renderAllTime() {
 /* ---------- players ---------- */
 // Per-Test player rows for one team, from ESPNcricinfo player innings lists (embedded at build time).
 // Match context comes from the team engine: venue, result and opponent strength going into the Test.
-const PP = DATA.playerPoints, PD = DATA.players;
+const OFFICIAL_PP = DATA.playerPoints, PD = DATA.players;
+let PP = structuredClone(OFFICIAL_PP); // official player points, or the admin's unsaved draft
 const longevity = n => { const L = PP.longevity; return n < L.below ? 1 : n <= L.upto ? L.first : L.first + L.step * Math.ceil((n - L.upto) / L.every); };
 const tier = (x, list) => { let b = 0; for (const [at, p] of list) if (x >= at) b = p; return b; };
 const ctxMult = c => PP.context.venue[c.venue] * PP.context.opp[c.opp] * PP.context.result[c.result];
@@ -744,7 +751,7 @@ function renderPlayers() {
     <p><b>Fielding.</b> ${F.keeperCatch} points per wicketkeeper catch, ${F.stumping} per stumping, ${F.catch} per catch by any other fielder. Run outs score nothing.</p>
     <p><b>Match context.</b> Each Test's points are multiplied by the context from the team ratings: venue (${Object.entries(C.venue).map(([k, v]) => `${k} ×${v}`).join(", ")}), opponent strength going into the Test (${Object.entries(C.opp).map(([k, v]) => `${k} ×${v}`).join(", ")}) and India's result (${Object.entries(C.result).map(([k, v]) => `${k} ×${v}`).join(", ")}). Opponent strength follows the rating type chosen at the top of the page.</p>
     <p><b>Longevity.</b> Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under ${L.below} innings ×1, ${L.below}–${L.upto} ×${L.first}, then +${L.step} for every further ${L.every} innings (51–75 ×${(L.first + L.step).toFixed(1)}, 76–100 ×${(L.first + 2 * L.step).toFixed(1)}, …). The overall rating adds the three.</p>
-    <p class="note">Player data: ESPNcricinfo Statsguru player innings lists. Indian players only for now.</p>`;
+    <p class="note">Every value is listed under <a href="#points">Points system</a>, last changed ${fmtStamp(DATA.playerPointsFile)}. Player data: ESPNcricinfo Statsguru player innings lists. Indian players only for now.</p>`;
 }
 function renderPlayerDetail() {
   const box = $("#pDetail");
@@ -798,26 +805,79 @@ function bindInputs() {
     if (!isAdmin()) return;
     set(v); clearTimeout(timer); timer = setTimeout(recompute, 250);
   });
-  $("#discardDraft").addEventListener("click", () => { cfg = structuredClone(OFFICIAL); fillInputs(); recompute(); });
+  $("#discardDraft").addEventListener("click", () => { cfg = structuredClone(OFFICIAL); PP = structuredClone(OFFICIAL_PP); fillInputs(); recompute(); });
 }
-function fillInputs() { for (const [id, get] of BIND) document.getElementById(id).value = get(); }
+/* player points inputs: [id, getter, setter] like BIND */
+const PBIND = [];
+function bindPlayerInputs() {
+  const inp = (id, step, get, set) => { PBIND.push([id, get, set]); return `<input type="number" step="${step}" id="${id}">`; };
+  const row = (label, ...cells) => `<tr><td>${label}</td>${cells.map(c => `<td class="n">${c}</td>`).join("")}</tr>`;
+  const tbl = (title, head, rows) => `<div class="panel tbl-wrap"><h3>${title}</h3><table class="pointsgrid">${head ? `<thead><tr>${head.map((h, i) => `<th${i ? ' class="n"' : ""}>${h}</th>`).join("")}</tr></thead>` : ""}<tbody>${rows.join("")}</tbody></table></div>`;
+  const pair = (key, list, i, lab) => row(lab(list[i][0]), inp(`p-${key}-${i}`, 1, () => listOf(key)[i][1], v => listOf(key)[i][1] = v));
+  const listOf = key => key === "ms" ? PP.bat.milestones : key === "haul" ? PP.bowl.hauls : PP.bowl.match;
+  const B = PP.bat, W = PP.bowl;
+  const html = [
+    tbl("Batting", ["Per innings", "Points"], [
+      row("Per run", inp("p-run", 0.5, () => PP.bat.run, v => PP.bat.run = v)),
+      ...B.milestones.map((_, i) => pair("ms", B.milestones, i, a => `Bonus for reaching ${a}`)),
+      row("Hundred in each innings: Test batting points ×", inp("p-twin", 0.05, () => PP.bat.twin, v => PP.bat.twin = v))]),
+    tbl("Bowling", ["", "Points"], [
+      row("Per wicket", inp("p-wkt", 1, () => PP.bowl.wkt, v => PP.bowl.wkt = v)),
+      ...W.hauls.map((_, i) => pair("haul", W.hauls, i, a => `${a} wickets in an innings`)),
+      ...W.match.map((_, i) => pair("match", W.match, i, a => `${a}${i === W.match.length - 1 ? "+" : ""} wickets in a match`))]),
+    tbl("Fielding", ["", "Points"], [
+      row("Wicketkeeper catch", inp("p-ctwk", 1, () => PP.field.keeperCatch, v => PP.field.keeperCatch = v)),
+      row("Stumping", inp("p-st", 1, () => PP.field.stumping, v => PP.field.stumping = v)),
+      row("Catch by any other fielder", inp("p-ct", 1, () => PP.field.catch, v => PP.field.catch = v))]),
+    tbl("Match context (× the Test's points)", null, [
+      ...["home", "neutral", "away"].map(k => row(`Venue: ${k}`, inp(`p-v-${k}`, 0.05, () => PP.context.venue[k], v => PP.context.venue[k] = v))),
+      ...["stronger", "same", "weaker"].map(k => row(`Opponent: ${k}`, inp(`p-o-${k}`, 0.05, () => PP.context.opp[k], v => PP.context.opp[k] = v))),
+      ...["won", "drawn", "tied", "lost", "abandoned"].map(k => row(`Result: ${k}`, inp(`p-r-${k}`, 0.05, () => PP.context.result[k], v => PP.context.result[k] = v)))]),
+    tbl("Longevity (each discipline separately)", null, [
+      row("×1 below this many innings", inp("p-l-below", 1, () => PP.longevity.below, v => PP.longevity.below = v)),
+      row("Multiplier from there", inp("p-l-first", 0.05, () => PP.longevity.first, v => PP.longevity.first = v)),
+      row("… up to this many innings", inp("p-l-upto", 1, () => PP.longevity.upto, v => PP.longevity.upto = v)),
+      row("Then add", inp("p-l-step", 0.05, () => PP.longevity.step, v => PP.longevity.step = v)),
+      row("… for every further innings block of", inp("p-l-every", 1, () => PP.longevity.every, v => PP.longevity.every = v))])
+  ];
+  $("#pptsGrid").innerHTML = html.join("");
+  let timer;
+  for (const [id, , set] of PBIND) document.getElementById(id).addEventListener("input", e => {
+    const v = parseFloat(e.target.value); if (!isFinite(v) || !isAdmin()) return;
+    if (id === "p-l-every" && v <= 0) return;
+    set(v); clearTimeout(timer);
+    timer = setTimeout(() => { PR = null; dirty.add("players"); renderAdmin(); }, 250);
+  });
+}
+function fillInputs() {
+  for (const [id, get] of BIND) document.getElementById(id).value = get();
+  for (const [id, get] of PBIND) document.getElementById(id).value = get();
+}
 function fmtStamp(name) { const m = name.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/); return m ? fmtD(`${m[1]}-${m[2]}-${m[3]}`) : name; }
 function renderAdmin() {
   const admin = isAdmin();
-  for (const [id] of BIND) document.getElementById(id).disabled = !admin;
+  for (const [id] of [...BIND, ...PBIND]) document.getElementById(id).disabled = !admin;
   $("#adminBar").hidden = !admin;
   $("#draftBanner").hidden = admin || !isDraft();
   $("#ptsNote").textContent = admin
     ? "You are editing a draft. Changes apply only in this tab until you save them to GitHub."
     : `This is the official points system, last changed ${fmtStamp(DATA.pointsFile)}. Only the site admin can change it.`;
+  $("#pptsNote").textContent = admin
+    ? "Player ratings on the Players tab use these values. Save them with Save player points to GitHub."
+    : `The official player points, last changed ${fmtStamp(DATA.playerPointsFile)}. Only the site admin can change them. See the Players tab for the ratings.`;
   if (!admin) return;
   const d = new Date(), pad = n => String(n).padStart(2, "0");
-  const name = `points-${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}.json`;
-  const save = $("#saveGitHub");
-  save.href = `https://github.com/${DATA.repo}/new/main/data/points?filename=${encodeURIComponent(name)}&value=${encodeURIComponent(JSON.stringify(cfg, null, 2) + "\n")}`;
-  save.toggleAttribute("aria-disabled", !isDraft());
-  save.style.pointerEvents = isDraft() ? "" : "none"; save.style.opacity = isDraft() ? "" : ".4";
-  $("#draftStatus").textContent = isDraft() ? "Unsaved changes." : "No changes from the official points system yet.";
+  const stamp = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+  const link = (el, dir, name, obj, on) => {
+    el.href = `https://github.com/${DATA.repo}/new/main/data/${dir}?filename=${encodeURIComponent(name)}&value=${encodeURIComponent(JSON.stringify(obj, null, 2) + "\n")}`;
+    el.toggleAttribute("aria-disabled", !on);
+    el.style.pointerEvents = on ? "" : "none"; el.style.opacity = on ? "" : ".4";
+  };
+  link($("#saveGitHub"), "points", `points-${stamp}.json`, cfg, isTeamDraft());
+  link($("#savePlayerGitHub"), "player_points", `player-points-${stamp}.json`, PP, isPlayerDraft());
+  $("#draftStatus").textContent = isTeamDraft() && isPlayerDraft() ? "Unsaved team and player points changes: save each one."
+    : isTeamDraft() ? "Unsaved team points changes." : isPlayerDraft() ? "Unsaved player points changes."
+    : "No changes from the official points yet.";
 }
 function renderPoints() {
   const cnt = {}; for (const m of R.log) if (m.result === "won") { const c = m.sides[0].cat; cnt[c] = (cnt[c] || 0) + 1; }
@@ -877,7 +937,7 @@ function init() {
     MODE = b.dataset.mode; try { localStorage.setItem("ttr-mode", MODE); } catch (e) {}
     recompute();
   });
-  bindInputs(); fillInputs();
+  bindInputs(); bindPlayerInputs(); fillInputs();
   const lastM = DATA.matches[DATA.matches.length - 1];
   $("#sub").textContent = `Every men's Test from 1877 to ${fmtD(lastM[0])}: ${DATA.matches.length.toLocaleString()} matches, scored by venue, result, margin and the strength of the opposition.`;
   $("#foot").innerHTML = `Results from <a href="https://stats.espncricinfo.com/ci/engine/stats/index.html?class=1;template=results;type=team">ESPNcricinfo Statsguru</a>, data built ${fmtD(DATA.built)}. Tests still in progress are left out until they finish.`;

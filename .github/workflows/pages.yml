@@ -3,7 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-    # data/points/** = the admin saved a new points system; rebuild with it.
+    # data/points/** or data/player_points/** = the admin saved new points; rebuild with them.
     paths: ["data/**", "app/**", "scripts/build.py", "scripts/points.py", "dist/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 

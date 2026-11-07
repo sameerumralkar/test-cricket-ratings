@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Player ratings, computed Test by Test, using the team ratings for match context.
 
-Each Test a player plays earns batting, bowling and fielding points (data/player_points.json).
+Each Test a player plays earns batting, bowling and fielding points (newest file in data/player_points/).
 Those match points are scaled by the match context taken from the team ratings: where the
 Test was played, the result for the player's team, and whether the opponent was stronger,
 the same or weaker going into the match. A player's rating after any Test is
@@ -20,7 +20,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-P = json.loads((ROOT / "data" / "player_points.json").read_text())
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from points import latest_player  # noqa: E402
+PLAYER_POINTS_FILE, P = latest_player()  # newest file in data/player_points/
 TEAM_NAME = {"india": "India"}
 
 

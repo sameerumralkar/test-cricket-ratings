@@ -35,7 +35,7 @@ England and Australia start at 100, later teams at 85. Visitors see these values
 
 ## Player ratings (India)
 
-The **Players** tab rates every Indian Test player, Test by Test, from ESPNcricinfo's player innings lists. Rules are in [`data/player_points.json`](data/player_points.json).
+The **Players** tab rates every Indian Test player, Test by Test, from ESPNcricinfo's player innings lists. The official rules are the newest file in [`data/player_points/`](data/player_points/), which the admin changes the same way as the team points (see below).
 
 | | Points |
 |---|---|
@@ -50,13 +50,16 @@ The **Players** tab rates every Indian Test player, Test by Test, from ESPNcrici
 
 `python3 scripts/player_ratings.py` prints the top 25 and writes the full table to [`dist/players_india.csv`](dist/players_india.csv); `scripts/fetch_players.py` re-downloads the player data.
 
-## Changing the points system (admin)
+## Changing the points (admin)
 
-The official points system is the newest file in [`data/points/`](data/points/); each change is a new `points-YYYYMMDD-HHMMSS.json` file, so the folder is also the history of every change.
+There are two sets of official points, each the newest file in its folder; every change is a new dated file, so each folder is also the history of every change:
+
+- team points: [`data/points/`](data/points/) (`points-YYYYMMDD-HHMMSS.json`)
+- player points: [`data/player_points/`](data/player_points/) (`player-points-YYYYMMDD-HHMMSS.json`)
 
 1. Open the app's hidden admin view: https://sameerumralkar.github.io/test-cricket-ratings/#admin
-2. Change any values. Every rating since 1877 is recalculated live, in your browser tab only.
-3. Click **Save to GitHub**. GitHub opens with the new settings filled in as a new file; click **Commit changes**.
+2. Change any values: team points at the top, player points under **Player points**. Every rating is recalculated live, in your browser tab only.
+3. Click **Save team points to GitHub** or **Save player points to GitHub** (once for each set you changed). GitHub opens with the new settings filled in as a new file; click **Commit changes**.
 4. The Pages workflow rebuilds the site with the new points, usually within a minute or two.
 
 Only the repository owner can commit, so anyone else who finds `#admin` can preview changes but cannot publish them. An invalid file fails the build and the live site keeps its previous version.
@@ -80,7 +83,7 @@ python3 scripts/plot_history.py              # one panel per team
 
 - `scripts/fetch_results.py` downloads all Test results from ESPNcricinfo Statsguru (home, away and neutral team results, plus the innings view to detect follow-ons) into `data/matches.json`. Tests still in progress are skipped.
 - `scripts/build.py` embeds the data and `data/team_colors.json` into `app/template.html`, producing `dist/index.html`.
-- `scripts/points.py` loads and checks the newest points file; `scripts/ratings_engine.py` is the Python version of the rating engine, used by the chart scripts.
+- `scripts/points.py` loads and checks the newest team and player points files; `scripts/ratings_engine.py` is the Python version of the rating engine, used by the chart scripts.
 
 Pushing changes under `dist/` redeploys the site via GitHub Actions.
 

@@ -4,12 +4,13 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from points import latest as latest_points
+from points import latest as latest_points, latest_player
 
 ROOT = Path(__file__).resolve().parent.parent
 matches = json.loads((ROOT / "data" / "matches.json").read_text())
 
 POINTS_FILE, POINTS = latest_points()
+PLAYER_POINTS_FILE, PLAYER_POINTS = latest_player()
 
 rows = []
 for m in matches:
@@ -41,7 +42,8 @@ payload = {
     "pointsFile": POINTS_FILE,
     "repo": "sameerumralkar/test-cricket-ratings",
     "players": players,
-    "playerPoints": json.loads((ROOT / "data" / "player_points.json").read_text()),
+    "playerPoints": PLAYER_POINTS,
+    "playerPointsFile": PLAYER_POINTS_FILE,
     "colors": {t: v["hex"] for t, v in json.loads((ROOT / "data" / "team_colors.json").read_text()).items()},
 }
 tpl = (ROOT / "app" / "template.html").read_text()
