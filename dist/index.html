@@ -649,6 +649,9 @@ function renderAllTime() {
 const OFFICIAL_PP = DATA.playerPoints, PD = DATA.players;
 let PP = structuredClone(OFFICIAL_PP); // official player points, or the admin's unsaved draft
 const longevity = n => { const L = PP.longevity; return n < L.below ? 1 : n <= L.upto ? L.first : L.first + L.step * Math.ceil((n - L.upto) / L.every); };
+const band = (x, list) => { let k = -1; list.forEach(([at], j) => { if (x >= at) k = j; }); return k; };
+// Column labels for each band: "5–7", "8–9", "10"; last match band open-ended ("16+").
+const bandLabels = (list, open) => list.map(([at], j) => { const nx = list[j + 1]; return nx ? (nx[0] - 1 > at ? `${at}–${nx[0] - 1}` : `${at}`) : open ? `${at}+` : `${at}`; });
 const tier = (x, list) => { let b = 0; for (const [at, p] of list) if (x >= at) b = p; return b; };
 const ctxMult = c => PP.context.venue[c.venue] * PP.context.opp[c.opp] * PP.context.result[c.result];
 let PR = null, pDisc = "all", pAsof = null, pLimit = 50, pSel = null, pChart;
@@ -657,7 +660,7 @@ function runPlayers() {
   R.log.forEach((m, i) => { const s = m.teams.indexOf(team); if (s >= 0) idx[m.date + "|" + m.teams[1 - s]] = i; });
   const P = PD.names.map(name => ({ name, hist: [], s: null }));
   const fresh = () => ({ tests: 0, bi: 0, no: 0, runs: 0, hs: 0, ms: PP.bat.milestones.map(() => 0), twins: 0,
-    wi: 0, wkts: 0, best: 0, w5: 0, w8: 0, w10i: 0, w10m: 0, fi: 0, ctwk: 0, ctfi: 0, st: 0, bat: 0, bowl: 0, field: 0, first: null });
+    wi: 0, wkts: 0, best: 0, hb: PP.bowl.hauls.map(() => 0), mb: PP.bowl.match.map(() => 0), fi: 0, ctwk: 0, ctfi: 0, st: 0, bat: 0, bowl: 0, field: 0, first: null });
   const tests = [];
   PD.tests.forEach(([date, opp, ground, players, bat, bowl, field], ti) => {
     const li = idx[date + "|" + opp], m = li != null ? R.log[li] : null;
@@ -671,7 +674,7 @@ function runPlayers() {
     const by = (rows) => { const o = {}; for (const r of rows) (o[r[0]] = o[r[0]] || []).push(r); return o; };
     const B = by(bat), W = by(bowl), F = by(field);
     for (const pi of players) {
-      const p = P[pi], s = p.s ? { ...p.s, ms: p.s.ms.slice() } : fresh();
+      const p = P[pi], s = p.s ? { ...p.s, ms: p.s.ms.slice(), hb: p.s.hb.slice(), mb: p.s.mb.slice() } : fresh();
       s.tests++; s.first = s.first || date;
       const inns = B[pi] || [];
       let bp = 0, hundreds = 0;
@@ -684,8 +687,9 @@ function runPlayers() {
       if (hundreds >= 2) { bp *= PP.bat.twin; s.twins++; }
       const ws = (W[pi] || []).map(r => r[1]), mw = ws.reduce((a, b) => a + b, 0);
       let wp = ws.reduce((a, w) => a + w * PP.bowl.wkt + tier(w, PP.bowl.hauls), 0) + tier(mw, PP.bowl.match);
-      for (const w of ws) { s.wi++; s.wkts += w; if (w >= 10) s.w10i++; else if (w >= 8) s.w8++; else if (w >= 5) s.w5++; }
-      s.best = Math.max(s.best, mw); if (mw >= 10) s.w10m++;
+      // haul and match bands count each instance in the band that scored it (e.g. 8 wickets = an 8-9 haul, not also a 5-7)
+      for (const w of ws) { s.wi++; s.wkts += w; const k = band(w, PP.bowl.hauls); if (k >= 0) s.hb[k]++; }
+      s.best = Math.max(s.best, mw); { const k = band(mw, PP.bowl.match); if (k >= 0) s.mb[k]++; }
       const fs = F[pi] || [];
       let fp = 0;
       for (const [, a, b, c] of fs) { fp += a * PP.field.keeperCatch + b * PP.field.catch + c * PP.field.stumping; s.fi++; s.ctwk += a; s.ctfi += b; s.st += c; }
@@ -727,7 +731,7 @@ function renderPlayers() {
   const head = {
     all: ["Tests", "Span", "Batting", "Bowling", "Fielding", "Rating"],
     bat: ["Tests", "Inns", "NO", "Runs", "HS", ...ms.map(m => m + "s"), "2×100", "× long.", "Points"],
-    bowl: ["Tests", "Inns", "Wkts", "Best match", "5wi", "8wi", "10wi", "10wm", "× long.", "Points"],
+    bowl: ["Tests", "Inns", "Wkts", "Best match", ...bandLabels(PP.bowl.hauls, false).map(l => `<span title="Innings with ${l} wickets">${l} WI</span>`), ...bandLabels(PP.bowl.match, true).map(l => `<span title="Tests with ${l} wickets in the match">${l} WM</span>`), "× long.", "Points"],
     field: ["Tests", "Inns", "Ct (wk)", "Ct", "St", "× long.", "Points"]
   }[pDisc];
   $("#pTable thead").innerHTML = `<tr><th>#</th><th>Player</th>${head.map(h => `<th class="n">${h}</th>`).join("")}</tr>`;
@@ -737,7 +741,7 @@ function renderPlayers() {
     let c;
     if (pDisc === "all") c = [s.tests, span, fmt0(sc.bat), fmt0(sc.bowl), fmt0(sc.field)].map(v => cell(v)).join("") + cell(fmt0(sc.all), "rating");
     else if (pDisc === "bat") c = [s.tests, s.bi, s.no, s.runs.toLocaleString(), s.hs, ...s.ms, s.twins, longevity(s.bi).toFixed(1)].map(v => cell(v)).join("") + cell(fmt0(sc.bat), "rating");
-    else if (pDisc === "bowl") c = [s.tests, s.wi, s.wkts, s.best, s.w5, s.w8, s.w10i, s.w10m, longevity(s.wi).toFixed(1)].map(v => cell(v)).join("") + cell(fmt0(sc.bowl), "rating");
+    else if (pDisc === "bowl") c = [s.tests, s.wi, s.wkts, s.best, ...s.hb, ...s.mb, longevity(s.wi).toFixed(1)].map(v => cell(v)).join("") + cell(fmt0(sc.bowl), "rating");
     else c = [s.tests, s.fi, s.ctwk, s.ctfi, s.st, longevity(s.fi).toFixed(1)].map(v => cell(v)).join("") + cell(fmt0(sc.field), "rating");
     const pi = PR.P.indexOf(p);
     return `<tr><td class="rank">${rank}</td><td class="team"><a href="#players" data-p="${pi}">${esc(p.name)}</a>${here ? ' <span class="chip">in this Test</span>' : ""}</td>${c}</tr>`;
@@ -747,7 +751,7 @@ function renderPlayers() {
   const L = PP.longevity, B = PP.bat, W = PP.bowl, F = PP.field, C = PP.context;
   $("#pRules").innerHTML = `
     <p><b>Batting.</b> ${B.run} point per run, plus a bonus for the highest milestone reached in the innings: ${B.milestones.map(([a, p]) => `${a}+ = ${p}`).join(", ")}. A hundred in each innings of the same Test multiplies that Test's batting points by ${B.twin}.</p>
-    <p><b>Bowling.</b> ${W.wkt} points per wicket, plus the highest innings haul bonus: ${W.hauls.map(([a, p]) => `${a} wickets = ${p}`).join(", ")}; and the highest match bonus: ${W.match.map(([a, p], i) => `${a}${i === W.match.length - 1 ? "+" : ""} wickets = ${p}`).join(", ")}.</p>
+    <p><b>Bowling.</b> ${W.wkt} points per wicket, plus a bonus for every haul, counted once at its own level (an 8-wicket innings earns the 8-wicket bonus only, not the 5-wicket one too). Innings: ${W.hauls.map(([a, p]) => `${a} wickets = ${p}`).join(", ")}; and the highest match bonus: ${W.match.map(([a, p], i) => `${a}${i === W.match.length - 1 ? "+" : ""} wickets = ${p}`).join(", ")}.</p>
     <p><b>Fielding.</b> ${F.keeperCatch} points per wicketkeeper catch, ${F.stumping} per stumping, ${F.catch} per catch by any other fielder. Run outs score nothing.</p>
     <p><b>Match context.</b> Each Test's points are multiplied by the context from the team ratings: venue (${Object.entries(C.venue).map(([k, v]) => `${k} ×${v}`).join(", ")}), opponent strength going into the Test (${Object.entries(C.opp).map(([k, v]) => `${k} ×${v}`).join(", ")}) and India's result (${Object.entries(C.result).map(([k, v]) => `${k} ×${v}`).join(", ")}). Opponent strength follows the rating type chosen at the top of the page.</p>
     <p><b>Longevity.</b> Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under ${L.below} innings ×1, ${L.below}–${L.upto} ×${L.first}, then +${L.step} for every further ${L.every} innings (51–75 ×${(L.first + L.step).toFixed(1)}, 76–100 ×${(L.first + 2 * L.step).toFixed(1)}, …). The overall rating adds the three.</p>
@@ -760,7 +764,8 @@ function renderPlayerDetail() {
   box.hidden = false;
   const last = p.hist[p.hist.length - 1], sc = pScores(last.s), s = last.s;
   $("#pdName").textContent = p.name;
-  $("#pdSummary").textContent = `${s.tests} Tests, ${T[p.hist[0].ti].date.slice(0, 4)}–${T[last.ti].date.slice(0, 4)}. ${s.runs.toLocaleString()} runs, ${s.wkts} wickets, ${s.ctwk + s.ctfi} catches, ${s.st} stumpings. Career rating ${fmt0(sc.all)} (batting ${fmt0(sc.bat)}, bowling ${fmt0(sc.bowl)}, fielding ${fmt0(sc.field)}).`;
+  $("#pdSummary").textContent = `${s.tests} Tests, ${T[p.hist[0].ti].date.slice(0, 4)}–${T[last.ti].date.slice(0, 4)}. ${s.runs.toLocaleString()} runs, ${s.wkts} wickets, ${s.ctwk + s.ctfi} catches, ${s.st} stumpings. Career rating ${fmt0(sc.all)} (batting ${fmt0(sc.bat)}, bowling ${fmt0(sc.bowl)}, fielding ${fmt0(sc.field)}).` +
+    (s.wkts ? ` Wickets in an innings: ${bandLabels(PP.bowl.hauls, false).map((l, k) => `${l} ×${s.hb[k]}`).join(", ")}. Wickets in a match: ${bandLabels(PP.bowl.match, true).map((l, k) => `${l} ×${s.mb[k]}`).join(", ")}.` : "");
   $("#pdTable tbody").innerHTML = p.hist.slice().reverse().map(h => { const t = T[h.ti], mm = h.match;
     return `<tr><td style="white-space:nowrap">${fmtD(t.date)}</td><td>v ${esc(t.opp)}<br><span class="muted">${esc(t.ground)}</span></td><td>${t.known ? esc(ctxText(t.ctx)) : "—"}</td><td class="n mono">${t.mult.toFixed(3)}</td>
       <td class="mono">${mm.runs.join(" & ") || "—"}</td><td class="mono">${mm.wkts.length ? mm.wkts.join(" & ") + " wkts" : "—"}</td><td class="n">${mm.ct}/${mm.st}</td><td class="n pts pos">+${fmt0(mm.pts)}</td><td class="n">${fmt0(pScores(h.s).all)}</td></tr>`; }).join("");

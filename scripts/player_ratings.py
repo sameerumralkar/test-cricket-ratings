@@ -51,6 +51,23 @@ def innings_bowl(w, B=P["bowl"]):
     return w * B["wkt"] + bonus
 
 
+def band(x, lst):
+    """Index of the highest threshold x reaches, or -1: each haul counts once, in the band that scored it."""
+    k = -1
+    for j, (at, _) in enumerate(lst):
+        if x >= at:
+            k = j
+    return k
+
+
+def labels(lst, open_end):
+    out = []
+    for j, (at, _) in enumerate(lst):
+        nx = lst[j + 1][0] if j + 1 < len(lst) else None
+        out.append(f"{at}-{nx - 1}" if nx and nx - 1 > at else f"{at}" if nx or not open_end else f"{at}+")
+    return out
+
+
 def match_bowl_bonus(w, B=P["bowl"]):
     bonus = 0
     for at, pts in B["match"]:
@@ -89,7 +106,7 @@ def compute(suffix="india"):
         return S.setdefault(pid, {
             "name": data["names"][pid], "tests": 0, "bi": 0, "no": 0, "runs": 0, "hs": 0,
             "ms": {at: 0 for at, _ in P["bat"]["milestones"]}, "twins": 0,
-            "wi": 0, "wkts": 0, "best": 0, "w5": 0, "w8": 0, "w10i": 0, "w10m": 0,
+            "wi": 0, "wkts": 0, "best": 0, "hb": [0] * len(P["bowl"]["hauls"]), "mb": [0] * len(P["bowl"]["match"]),
             "fi": 0, "ctwk": 0, "ctfi": 0, "st": 0,
             "bat": 0.0, "bowl": 0.0, "field": 0.0, "first": None, "last": None, "hist": []})
 
@@ -131,11 +148,13 @@ def compute(suffix="india"):
             for w in ws:
                 s["wi"] += 1
                 s["wkts"] += w
-                s["w5"] += 5 <= w < 8
-                s["w8"] += 8 <= w < 10
-                s["w10i"] += w >= 10
+                k = band(w, P["bowl"]["hauls"])
+                if k >= 0:
+                    s["hb"][k] += 1
             s["best"] = max(s["best"], sum(ws))
-            s["w10m"] += sum(ws) >= 10
+            k = band(sum(ws), P["bowl"]["match"])
+            if k >= 0:
+                s["mb"][k] += 1
             s["bowl"] += pts * mult
             # fielding
             fs = field.get(pid, [])
@@ -171,13 +190,13 @@ def main():
         w = csv.writer(f)
         ms = [at for at, _ in P["bat"]["milestones"]]
         w.writerow(["rank", "player", "first", "last", "tests", "bat_inns", "not_outs", "runs", "highest"]
-                   + [f"{a}s" for a in ms] + ["twin_100s", "bowl_inns", "wkts", "best_match", "5wi", "8wi",
-                   "10wi", "10wm", "field_inns", "ct_wk", "ct_field", "st", "bat_pts", "bowl_pts",
+                   + [f"{a}s" for a in ms] + ["twin_100s", "bowl_inns", "wkts", "best_match"]
+                   + [f"{l}wi" for l in labels(P["bowl"]["hauls"], False)]
+                   + [f"{l}wm" for l in labels(P["bowl"]["match"], True)] + ["field_inns", "ct_wk", "ct_field", "st", "bat_pts", "bowl_pts",
                    "field_pts", "rating"])
         for i, s in enumerate(rows, 1):
             w.writerow([i, s["name"], s["first"], s["last"], s["tests"], s["bi"], s["no"], s["runs"], s["hs"]]
-                       + [s["ms"][a] for a in ms] + [s["twins"], s["wi"], s["wkts"], s["best"], s["w5"],
-                       s["w8"], s["w10i"], s["w10m"], s["fi"], s["ctwk"], s["ctfi"], s["st"],
+                       + [s["ms"][a] for a in ms] + [s["twins"], s["wi"], s["wkts"], s["best"]] + s["hb"] + s["mb"] + [s["fi"], s["ctwk"], s["ctfi"], s["st"],
                        round(s["bat"] * longevity(s["bi"]), 1), round(s["bowl"] * longevity(s["wi"]), 1),
                        round(s["field"] * longevity(s["fi"]), 1), round(rating(s), 1)])
     print(f"wrote {out}")
