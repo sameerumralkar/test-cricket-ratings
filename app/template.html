@@ -784,7 +784,7 @@ function renderPlayers() {
     <p><b>Bowling.</b> ${W.wkt} points per wicket, plus a bonus for every haul, counted once at its own level (an 8-wicket innings earns the 8-wicket bonus only, not the 5-wicket one too). Innings: ${W.hauls.map(([a, p]) => `${a} wickets = ${p}`).join(", ")}; and the highest match bonus: ${W.match.map(([a, p], i) => `${a}${i === W.match.length - 1 ? "+" : ""} wickets = ${p}`).join(", ")}.</p>
     <p><b>Fielding.</b> ${F.keeperCatch} points per wicketkeeper catch, ${F.stumping} per stumping, ${F.catch} per catch by any other fielder. Run outs score nothing.</p>
     <p><b>Match context.</b> Each Test's points are multiplied by the context from the team ratings: venue (${Object.entries(C.venue).map(([k, v]) => `${k} ×${v}`).join(", ")}), opponent strength going into the Test (${Object.entries(C.opp).map(([k, v]) => `${k} ×${v}`).join(", ")}) and ${esc(PD.team)}'s result (${Object.entries(C.result).map(([k, v]) => `${k} ×${v}`).join(", ")}). Opponent strength follows the rating type chosen at the top of the page.</p>
-    <p><b>Longevity.</b> Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under ${L.below} innings ×1, ${L.below}–${L.upto} ×${L.first}, then +${L.step} for every further ${L.every} innings (51–75 ×${(L.first + L.step).toFixed(1)}, 76–100 ×${(L.first + 2 * L.step).toFixed(1)}, …). The overall rating adds the three.</p>
+    <p><b>Longevity.</b> Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: up to ${L.below - 1} innings ×1, ${L.below}–${L.upto} ×${L.first}, then +${L.step} for every further ${L.every} innings (${L.upto + 1}–${L.upto + L.every} ×${(L.first + L.step).toFixed(1)}, ${L.upto + L.every + 1}–${L.upto + 2 * L.every} ×${(L.first + 2 * L.step).toFixed(1)}, …). The overall rating adds the three.</p>
     <p><b>Points per innings.</b> Each tab divides that discipline's points (after context and longevity) by its innings: batting innings, bowling innings, innings in the field. Points / Innings on the Overall tab adds the three.</p>
     <p class="note">Every value is listed under <a href="#points">Points system</a>, last changed ${fmtStamp(DATA.playerPointsFile)}. Player data: ESPNcricinfo Statsguru player innings lists, per team: a player who played for two countries has a separate entry for each.</p>`;
 }
@@ -870,7 +870,7 @@ function bindPlayerInputs() {
       ...["stronger", "same", "weaker"].map(k => row(`Opponent: ${k}`, inp(`p-o-${k}`, 0.05, () => PP.context.opp[k], v => PP.context.opp[k] = v))),
       ...["won", "drawn", "tied", "lost", "abandoned"].map(k => row(`Result: ${k}`, inp(`p-r-${k}`, 0.05, () => PP.context.result[k], v => PP.context.result[k] = v)))]),
     tbl("Longevity (each discipline separately)", null, [
-      row("×1 below this many innings", inp("p-l-below", 1, () => PP.longevity.below, v => PP.longevity.below = v)),
+      row("×1 for fewer innings than", inp("p-l-below", 1, () => PP.longevity.below, v => PP.longevity.below = v)),
       row("Multiplier from there", inp("p-l-first", 0.05, () => PP.longevity.first, v => PP.longevity.first = v)),
       row("… up to this many innings", inp("p-l-upto", 1, () => PP.longevity.upto, v => PP.longevity.upto = v)),
       row("Then add", inp("p-l-step", 0.05, () => PP.longevity.step, v => PP.longevity.step = v)),

@@ -46,7 +46,7 @@ The **Players** tab rates every Test player of all 12 Test nations, Test by Test
 
 **Match context, from the team ratings.** Every Test's points are multiplied by venue (home ×1, neutral ×1.05, away ×1.1), the opponent's strength going into the Test (stronger ×1.15, same ×1, weaker ×0.9) and India's result (won ×1.1, drawn ×1, tied ×1.05, lost ×0.9). Context uses the player's own team: so for an Indian player, a hundred in an away win over a stronger side is worth 1.39× and the same hundred in a home loss to a weaker side 0.81×.
 
-**Longevity.** Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: under 25 innings ×1, 25–50 ×1.1, then +0.1 for every further 25 innings (51–75 ×1.2, 76–100 ×1.3, …). The overall rating is the sum of the three.
+**Longevity.** Batting, bowling and fielding totals each get their own multiplier from that discipline's innings count: up to 50 innings ×1, 51–100 ×1.1, then +0.1 for every further 50 innings (101–150 ×1.2, 151–200 ×1.3, …). The overall rating is the sum of the three.
 
 Each team's player data is `data/players/<team>.json`; a player who played for two countries has a separate entry for each. `python3 scripts/player_ratings.py` prints each team's top players and writes the full tables to [`dist/players/`](dist/players/) (`india.csv`, `england.csv`, …). `python3 scripts/fetch_players.py` fetches only Tests since each file's last one (the last 60 days are re-fetched to pick up corrections); `--full` re-downloads everything, which takes about two hours.
 
