@@ -41,6 +41,7 @@ The **Players** tab rates every Test player of all 12 Test nations, Test by Test
 |---|---|
 | Batting | 1 per run, plus the bonus for the highest milestone reached in an innings: 50 = 15, 100 = 30, 150 = 45, 200 = 60, 250 = 75, 300 = 100, 350 = 125, 400 = 150 |
 | Hundred in each innings | that Test's batting points × 1.5 |
+| Five wickets in each innings | that Test's bowling points × 1.5 |
 | Bowling | 15 per wicket, plus the highest innings haul bonus (5 = 15, 8 = 50, 10 = 100) and the highest match bonus (10 = 30, 13 = 60, 15 = 90, 16+ = 120) |
 | Fielding | 10 per wicketkeeper catch and per stumping, 5 per catch by any other fielder; run outs score nothing |
 

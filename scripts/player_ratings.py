@@ -111,7 +111,7 @@ def compute(slug="india"):
     def st(pid):
         return S.setdefault(pid, {
             "name": data["names"][pid], "tests": 0, "bi": 0, "no": 0, "runs": 0, "hs": 0,
-            "ms": {at: 0 for at, _ in P["bat"]["milestones"]}, "twins": 0,
+            "ms": {at: 0 for at, _ in P["bat"]["milestones"]}, "twins": 0, "twin5": 0,
             "wi": 0, "wkts": 0, "best": 0, "hb": [0] * len(P["bowl"]["hauls"]), "mb": [0] * len(P["bowl"]["match"]),
             "fi": 0, "ctwk": 0, "ctfi": 0, "st": 0,
             "bat": 0.0, "bowl": 0.0, "field": 0.0, "first": None, "last": None, "hist": []})
@@ -153,6 +153,9 @@ def compute(slug="india"):
             # bowling
             ws = bowl.get(pid, [])
             pts = sum(innings_bowl(w) for w in ws) + match_bowl_bonus(sum(ws))
+            if sum(1 for w in ws if w >= P["bowl"]["hauls"][0][0]) >= 2:  # 5+ wickets in each innings
+                pts *= P["bowl"]["twin"]
+                s["twin5"] += 1
             for w in ws:
                 s["wi"] += 1
                 s["wkts"] += w
@@ -214,12 +217,12 @@ def report(suffix, top):
         w.writerow(["rank", "player", "first", "last", "tests", "bat_inns", "not_outs", "runs", "highest"]
                    + [f"{a}s" for a in ms] + ["twin_100s", "bowl_inns", "wkts", "best_match"]
                    + [f"{l}wi" for l in labels(P["bowl"]["hauls"], False)]
-                   + [f"{l}wm" for l in labels(P["bowl"]["match"], True)] + ["field_inns", "ct_wk", "ct_field", "st", "bat_pts", "bowl_pts",
+                   + [f"{l}wm" for l in labels(P["bowl"]["match"], True)] + ["twin_5wi", "field_inns", "ct_wk", "ct_field", "st", "bat_pts", "bowl_pts",
                    "field_pts", "rating", "bat_pts_per_inns", "bowl_pts_per_inns", "field_pts_per_inns",
                    "points_per_innings"])
         for i, s in enumerate(rows, 1):
             w.writerow([i, s["name"], s["first"], s["last"], s["tests"], s["bi"], s["no"], s["runs"], s["hs"]]
-                       + [s["ms"][a] for a in ms] + [s["twins"], s["wi"], s["wkts"], s["best"]] + s["hb"] + s["mb"] + [s["fi"], s["ctwk"], s["ctfi"], s["st"],
+                       + [s["ms"][a] for a in ms] + [s["twins"], s["wi"], s["wkts"], s["best"]] + s["hb"] + s["mb"] + [s["twin5"], s["fi"], s["ctwk"], s["ctfi"], s["st"],
                        round(s["bat"] * longevity(s["bi"]), 1), round(s["bowl"] * longevity(s["wi"]), 1),
                        round(s["field"] * longevity(s["fi"]), 1), round(rating(s), 1)] + per_innings(s))
     print(f"wrote {out.relative_to(ROOT)}")

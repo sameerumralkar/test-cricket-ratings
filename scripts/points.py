@@ -74,7 +74,7 @@ def validate_player(cfg):
     """Raise ValueError if the player points file is missing a value or has a bad one."""
     try:
         b, w, f, L, c = cfg["bat"], cfg["bowl"], cfg["field"], cfg["longevity"], cfg["context"]
-        nums = [b["run"], b["twin"], w["wkt"], f["keeperCatch"], f["stumping"], f["catch"],
+        nums = [b["run"], b["twin"], w["wkt"], w["twin"], f["keeperCatch"], f["stumping"], f["catch"],
                 L["below"], L["first"], L["upto"], L["step"], L["every"]]
         nums += [c["venue"][k] for k in ("home", "neutral", "away")]
         nums += [c["opp"][k] for k in ("stronger", "same", "weaker")]
